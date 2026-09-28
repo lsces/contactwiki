@@ -63,15 +63,9 @@ if( $gBitSystem->isPackageActive( 'contactwiki' ) ) {
 		'content_edit_mini_tpl' => 'bitpackage:contactwiki/edit_wiki_reload_inc.tpl',
 	] );
 
-	// Own menu, own dropdown - these three tool links used to live bolted onto contact's own
-	// menu_contact.tpl (guarded by isPackageActive('contactwiki')), which was exactly the kind of
-	// "secondary code in the generic package" this whole split was meant to get away from. No
-	// index.php of its own to link the menu title at (homeable is false, no top-level page) -
-	// load_wiki_artists.php is the closest thing to an overview/entry point this package has.
-	$menuHash = [
-		'package_name'  => CONTACTWIKI_PKG_NAME,
-		'index_url'     => CONTACTWIKI_PKG_URL . 'load_wiki_artists.php',
-		'menu_template' => 'bitpackage:contactwiki/menu_contactwiki.tpl',
-	];
-	$gBitSystem->registerAppMenu( $menuHash );
+	// Tried registering this package's own app menu here (menu_contactwiki.tpl) instead of
+	// bolting these links onto contact's own menu_contact.tpl - didn't actually surface in the
+	// menu bar (registerAppMenu() apparently needs more than this, not chased down under time
+	// pressure), so reverted: the three tool links live back on contact's own menu, guarded by
+	// isPackageActive('contactwiki'), same as before this attempt.
 }
