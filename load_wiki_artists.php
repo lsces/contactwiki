@@ -25,7 +25,7 @@
 
 namespace Bitweaver\Contactwiki;
 
-use Bitweaver\Fisheye\FisheyeAlbum;
+use Bitweaver\Fisheyemedia\FisheyeAlbum;
 use Bitweaver\Fisheye\FisheyeGallery;
 use Bitweaver\KernelTools;
 
