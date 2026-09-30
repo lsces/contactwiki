@@ -1,0 +1,171 @@
+<?php
+/**
+ * The people pass for one Music artist/composer gallery - run before its albums are imported, so an
+ * album import can link every credit to a contact rather than to a name. Reads the gallery's own
+ * folder on disk (FisheyeAlbum::surveyArtistCredits(): every distinct MusicBrainz artist id across
+ * its albums' album-artist and track-artist tags) and resolves each person:
+ *
+ *   - a wiki contact already holding that MusicBrainz id          -> linked, nothing to do
+ *   - otherwise Wikidata (one SPARQL query for the whole gallery, P434 = MusicBrainz artist id):
+ *       - a contact already holding the resulting qid             -> linked (it just lacks the id)
+ *       - one Wikidata item                                       -> create, pre-ticked
+ *       - more than one                                           -> choose which, then create
+ *       - none                                                    -> shown, nothing to create from
+ *
+ * MusicBrainz itself is never called here - the tags already carry its ids, and Wikidata maps those
+ * straight to a qid; the qid (with the contact_id) is what an album's credit rows end up holding.
+ * Nothing is created until the list is reviewed and submitted. A created contact whose name matches
+ * the gallery's own title ("Samuel Barber" or "Barber, Samuel") also gets its 'music_gallery' link.
+ *
+ * @package contactwiki
+ * @subpackage functions
+ */
+
+namespace Bitweaver\Contactwiki;
+
+use Bitweaver\Fisheyemedia\FisheyeAlbum;
+use Bitweaver\Fisheye\FisheyeGallery;
+use Bitweaver\KernelTools;
+
+require_once '../kernel/includes/setup_inc.php';
+// mime_film_get_storage_root() - only auto-loaded via the LibertyMime attachment-plugin dispatch,
+// same explicit include load_album.php needs.
+require_once dirname( __DIR__ ).'/liberty/plugins/mime.film.php';
+
+global $gBitSystem, $gBitSmarty;
+
+$gBitSystem->verifyPackage( 'contactwiki' );
+$gBitSystem->verifyPackage( 'fisheyemedia' );
+$gBitSystem->verifyPermission( 'p_contact_update' );
+
+// "Barber, Samuel" and "Samuel Barber" both count as the same name, for the music_gallery link.
+function load_wiki_people_name_forms( string $pName ): array {
+	$name = mb_strtolower( trim( $pName ) );
+	$forms = [ $name ];
+	if( preg_match( '/^([^,]+),\s*(.+)$/', $name, $m ) ) {
+		$forms[] = $m[2].' '.$m[1];
+	}
+	return $forms;
+}
+
+$galleryId = (int)( $_REQUEST['gallery_id'] ?? 0 );
+
+if( !$galleryId ) {
+	// No gallery picked yet - list every artist/composer gallery under the top-level Music pool.
+	$galleries = [];
+	$topGalleryId = FisheyeGallery::getTopGalleryId( 'Music' );
+	if( $topGalleryId ) {
+		$topGallery = new FisheyeGallery( $topGalleryId );
+		$topGallery->load();
+		$listHash = [ 'max_records' => 1000 ];
+		$topGallery->loadImages( $listHash );
+		foreach( $topGallery->mItems as $item ) {
+			if( $item instanceof FisheyeGallery ) {
+				$galleries[] = [ 'gallery_id' => $item->mGalleryId, 'title' => $item->getTitle() ];
+			}
+		}
+		usort( $galleries, fn( $a, $b ) => strnatcasecmp( $a['title'], $b['title'] ) );
+	}
+	$gBitSmarty->assign( 'galleries', $galleries );
+	$gBitSystem->display( 'bitpackage:contactwiki/load_wiki_people.tpl', KernelTools::tra( 'Load Wiki People' ), [ 'display_mode' => 'edit' ] );
+	exit;
+}
+
+$gallery = new FisheyeGallery( $galleryId );
+$gallery->load();
+// Same validity check load_album.php uses - isValid() alone doesn't prove load() found a row.
+if( !$gallery->isValid() || empty( $gallery->getTitle() ) ) {
+	$gBitSystem->fatalError( KernelTools::tra( 'No gallery exists with the given ID.' ) );
+}
+$galleryTitle = $gallery->getTitle();
+
+// Folder resolution mirrors load_album.php's own: directly under Music/, or one level down under
+// the parent gallery (a box set's nested gallery).
+$root = \Bitweaver\Liberty\mime_film_get_storage_root();
+$artistDir = null;
+if( !empty( $root ) ) {
+	$musicDir = $root.'Music/';
+	if( is_dir( $musicDir.$galleryTitle.'/' ) ) {
+		$artistDir = $musicDir.$galleryTitle.'/';
+	} else {
+		$parentGalleries = $gallery->getParentGalleries();
+		$parentTitle = $parentGalleries ? current( $parentGalleries )['title'] : null;
+		if( $parentTitle && is_dir( $musicDir.$parentTitle.'/'.$galleryTitle.'/' ) ) {
+			$artistDir = $musicDir.$parentTitle.'/'.$galleryTitle.'/';
+		}
+	}
+}
+if( !$artistDir ) {
+	$gBitSystem->fatalError( KernelTools::tra( 'No folder found under Music/ for this gallery.' ).' ('.$galleryTitle.')' );
+}
+$galleryNameForms = load_wiki_people_name_forms( $galleryTitle );
+
+$result = null;
+if( !empty( $_REQUEST['fCreate'] ) ) {
+	$result = [ 'created' => [], 'errors' => [] ];
+	$qids = (array)( $_REQUEST['qid'] ?? [] );
+	foreach( (array)( $_REQUEST['selected'] ?? [] ) as $mbid ) {
+		$mbid = strtolower( trim( (string)$mbid ) );
+		$qid = ContactWikiIndividual::extractQid( (string)( $qids[$mbid] ?? '' ) );
+		if( !$qid || ContactWikiIndividual::findContactByMusicBrainzId( $mbid ) || ContactWikiIndividual::findContactByWikidataQid( $qid ) ) {
+			continue;
+		}
+		$created = ContactWikiIndividual::createFromWikidata( $qid );
+		if( empty( $created['content'] ) ) {
+			$result['errors'][] = [ 'mbid' => $mbid, 'error' => $created['error'] ];
+			continue;
+		}
+		$gContent = $created['content'];
+		if( array_intersect( load_wiki_people_name_forms( $gContent->getTitle() ), $galleryNameForms ) ) {
+			$gContent->upsertXref( $gContent->mContentId, 'music_gallery', [ 'xref' => $gallery->mContentId ] );
+		}
+		$result['created'][] = [ 'title' => $gContent->getTitle(), 'view_url' => $gContent->getDisplayUrl() ];
+	}
+}
+
+$survey = FisheyeAlbum::surveyArtistCredits( $artistDir );
+
+// Resolve: contacts first (no network), Wikidata only for whoever's left.
+$people = [];
+$unresolved = [];
+foreach( $survey['people'] as $person ) {
+	$person['contact'] = ContactWikiIndividual::findContactByMusicBrainzId( $person['mbid'] );
+	$person['status'] = $person['contact'] ? 'linked' : 'pending';
+	$person['wikidata'] = [];
+	if( !$person['contact'] ) {
+		$unresolved[] = $person['mbid'];
+	}
+	$people[$person['mbid']] = $person;
+}
+$wikidataError = false;
+if( $unresolved ) {
+	$wikidata = ContactWikiIndividual::lookupWikidataByMusicBrainzIds( $unresolved );
+	if( $wikidata === null ) {
+		$wikidataError = true;
+	}
+	foreach( $unresolved as $mbid ) {
+		$matches = $wikidata[$mbid] ?? [];
+		$people[$mbid]['wikidata'] = $matches;
+		if( count( $matches ) === 1 && ( $contact = ContactWikiIndividual::findContactByWikidataQid( $matches[0]['qid'] ) ) ) {
+			$people[$mbid]['contact'] = $contact;
+			$people[$mbid]['status'] = 'linked_by_qid';
+		} else {
+			$people[$mbid]['status'] = $wikidataError ? 'lookup_failed' : ( count( $matches ) === 1 ? 'create' : ( $matches ? 'choose' : 'not_on_wikidata' ) );
+		}
+	}
+}
+foreach( $people as &$person ) {
+	if( !empty( $person['contact'] ) ) {
+		$person['contact']['view_url'] = CONTACTWIKI_PKG_URL.'view.php?content_id='.$person['contact']['content_id'];
+	}
+}
+unset( $person );
+
+$gBitSmarty->assign( 'galleryId', $galleryId );
+$gBitSmarty->assign( 'galleryTitle', $galleryTitle );
+$gBitSmarty->assign( 'survey', [ 'albums' => $survey['albums'], 'tracks' => $survey['tracks'], 'unreadable' => $survey['unreadable'] ] );
+$gBitSmarty->assign( 'people', array_values( $people ) );
+$gBitSmarty->assign( 'wikidataError', $wikidataError );
+$gBitSmarty->assign( 'result', $result );
+
+$gBitSystem->display( 'bitpackage:contactwiki/load_wiki_people.tpl', KernelTools::tra( 'Load Wiki People' ).': '.$galleryTitle, [ 'display_mode' => 'edit' ] );

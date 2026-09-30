@@ -113,43 +113,15 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		if( !$galleryContentId || !$wikiQid || load_wiki_artists_existing_contact( $galleryContentId ) ) {
 			continue;
 		}
-		$entity = ContactWikiIndividual::fetchWikidataEntity( $wikiQid );
-		if( !$entity ) {
-			$result['errors'][] = [ 'gallery_content_id' => $galleryContentId, 'error' => KernelTools::tra( 'Could not fetch that Wikidata entity.' ) ];
-			continue;
-		}
-		$label = trim( $entity['labels']['en']['value'] ?? '' );
-		$isGroup = strcasecmp( $mbType, 'Person' ) !== 0;
-
-		if( $isGroup ) {
-			$gContent = new ContactWikiGroup();
-			$contactTypes = [];
-			foreach( ContactWikiGroup::instanceOfQids( $entity ) as $qid ) {
-				if( isset( ContactWikiGroup::GROUP_TYPE_MAP[$qid] ) ) {
-					$contactTypes[] = ContactWikiGroup::GROUP_TYPE_MAP[$qid];
-				}
-			}
-			$storeHash = [ 'organisation' => $label, 'fContactTypesSubmitted' => 1, 'contact_types' => $contactTypes ];
-		} else {
-			$gContent = new ContactWikiIndividual();
-			$parts = explode( ' ', $label );
-			$surname = array_pop( $parts ) ?: '';
-			$forename = implode( ' ', $parts );
-			$contactTypes = [];
-			foreach( ContactWikiIndividual::occupationQids( $entity ) as $qid ) {
-				if( isset( ContactWikiIndividual::OCCUPATION_MAP[$qid] ) ) {
-					$contactTypes[] = ContactWikiIndividual::OCCUPATION_MAP[$qid];
-				}
-			}
-			$storeHash = [ 'forename' => $forename, 'surname' => $surname, 'fContactTypesSubmitted' => 1, 'contact_types' => $contactTypes ];
-		}
-
-		if( $gContent->store( $storeHash ) ) {
-			$gContent->reloadFromWikidata( $wikiQid );
+		// MusicBrainz's own artist type decides individual vs group here - see
+		// ContactWikiTrait::createFromWikidata().
+		$created = ContactWikiIndividual::createFromWikidata( $wikiQid, strcasecmp( $mbType, 'Person' ) !== 0 );
+		if( isset( $created['content'] ) ) {
+			$gContent = $created['content'];
 			$gContent->upsertXref( $gContent->mContentId, 'music_gallery', [ 'xref' => $galleryContentId ] );
-			$result['created'][] = [ 'gallery_content_id' => $galleryContentId, 'title' => $label, 'content_id' => $gContent->mContentId, 'view_url' => $gContent->getDisplayUrl() ];
+			$result['created'][] = [ 'gallery_content_id' => $galleryContentId, 'title' => $gContent->getTitle(), 'content_id' => $gContent->mContentId, 'view_url' => $gContent->getDisplayUrl() ];
 		} else {
-			$result['errors'][] = [ 'gallery_content_id' => $galleryContentId, 'error' => implode( '; ', $gContent->mErrors ) ];
+			$result['errors'][] = [ 'gallery_content_id' => $galleryContentId, 'error' => $created['error'] ];
 		}
 	}
 }

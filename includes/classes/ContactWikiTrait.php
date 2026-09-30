@@ -188,6 +188,122 @@ trait ContactWikiTrait {
 		return [ 'items' => $items ];
 	}
 
+	/**
+	 * Wikidata items for a batch of MusicBrainz artist ids, via one SPARQL query (P434 = MusicBrainz
+	 * artist id) rather than a lookup per id - each result gives the qid, its English label, and
+	 * whether it's a human (P31 = Q5; anything else - band, orchestra, choir, duo - is a group).
+	 * An id Wikidata doesn't know is simply absent from the result; one claimed by more than one
+	 * item comes back with every candidate, for a person to choose between rather than a guess.
+	 * Null if the query itself fails (network, endpoint down), distinct from an empty result.
+	 *
+	 * @param list<string> $pMbids
+	 * @return array<string, list<array{qid:string, label:string, is_human:bool}>>|null
+	 */
+	public static function lookupWikidataByMusicBrainzIds( array $pMbids ): ?array {
+		$ret = [];
+		foreach( array_chunk( array_values( array_unique( $pMbids ) ), 150 ) as $chunk ) {
+			$values = implode( ' ', array_map( fn( $id ) => '"'.addslashes( $id ).'"', $chunk ) );
+			$query = 'SELECT ?mbid ?item ?itemLabel ?human WHERE { VALUES ?mbid { '.$values.' } ?item wdt:P434 ?mbid . '
+				.'BIND( EXISTS { ?item wdt:P31 wd:Q5 } AS ?human ) SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } }';
+			$context = stream_context_create( [ 'http' => [
+				'method'  => 'POST',
+				'header'  => self::userAgentHeader()."Accept: application/sparql-results+json\r\nContent-Type: application/x-www-form-urlencoded\r\n",
+				'content' => http_build_query( [ 'query' => $query ] ),
+				'timeout' => 30,
+			] ] );
+			$json = @file_get_contents( 'https://query.wikidata.org/sparql', false, $context );
+			if( $json === false ) {
+				return null;
+			}
+			foreach( json_decode( $json, true )['results']['bindings'] ?? [] as $row ) {
+				if( preg_match( '#/(Q\d+)$#', $row['item']['value'] ?? '', $m ) ) {
+					$ret[strtolower( $row['mbid']['value'] )][] = [
+						'qid'      => $m[1],
+						'label'    => $row['itemLabel']['value'] ?? $m[1],
+						'is_human' => ( $row['human']['value'] ?? '' ) === 'true',
+					];
+				}
+			}
+		}
+		return $ret;
+	}
+
+	/**
+	 * The wiki contact (individual or group) already holding a given external-id xref value - the
+	 * reverse of every LibertyContent::lookupXref*() helper (content_id -> its xrefs), here value ->
+	 * content_id, so a small direct read, same as load_wiki_artists.php's own music_gallery reverse
+	 * lookup. Live rows only.
+	 *
+	 * @return array{content_id:int, title:string, content_type_guid:string}|null
+	 */
+	private static function findWikiContactByXref( string $pItem, string $pValue ): ?array {
+		global $gBitDb;
+		$row = $gBitDb->getRow(
+			"SELECT lc.content_id, lc.title, lc.content_type_guid FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.content_id = x.content_id
+			 WHERE x.item = ? AND x.xkey_ext = ? AND x.end_date IS NULL
+			 AND lc.content_type_guid IN ( 'contactwikiindi', 'contactwikigroup' )",
+			[ $pItem, $pValue ]
+		);
+		return $row ? [ 'content_id' => (int)$row['content_id'], 'title' => $row['title'], 'content_type_guid' => $row['content_type_guid'] ] : null;
+	}
+
+	public static function findContactByMusicBrainzId( string $pMbid ): ?array {
+		return self::findWikiContactByXref( 'musicbrainz', strtolower( $pMbid ) );
+	}
+
+	public static function findContactByWikidataQid( string $pQid ): ?array {
+		return self::findWikiContactByXref( 'wikidata', strtoupper( $pQid ) );
+	}
+
+	/**
+	 * Create a wiki contact from a Wikidata item and apply everything reloadFromWikidata() derives
+	 * (external ids - including 'musicbrainz', so the new contact is matchable by MusicBrainz id
+	 * straight away - biography, dates, image). Individual or group: $pIsGroup when the caller
+	 * already knows (load_wiki_artists.php has MusicBrainz's own artist type to hand), otherwise
+	 * from the entity itself - a human (P31 = Q5) is an individual, anything else a group. Role
+	 * tags come from P106 occupations (individual) or P31 instance-of (group), through each class's
+	 * own curated map.
+	 *
+	 * @param string $pQid
+	 * @param bool|null $pIsGroup
+	 * @return array{content:object}|array{error:string}
+	 */
+	public static function createFromWikidata( string $pQid, ?bool $pIsGroup = null ): array {
+		$entity = self::fetchWikidataEntity( $pQid );
+		if( !$entity ) {
+			return [ 'error' => KernelTools::tra( 'Could not fetch that Wikidata entity.' ).' ('.$pQid.')' ];
+		}
+		$label = trim( $entity['labels']['en']['value'] ?? '' );
+		$isGroup = $pIsGroup ?? !in_array( 'Q5', self::itemClaimQids( $entity, 'P31' ), true );
+
+		$contactTypes = [];
+		if( $isGroup ) {
+			$gContent = new ContactWikiGroup();
+			foreach( ContactWikiGroup::instanceOfQids( $entity ) as $qid ) {
+				if( isset( ContactWikiGroup::GROUP_TYPE_MAP[$qid] ) ) {
+					$contactTypes[] = ContactWikiGroup::GROUP_TYPE_MAP[$qid];
+				}
+			}
+			$storeHash = [ 'organisation' => $label, 'fContactTypesSubmitted' => 1, 'contact_types' => $contactTypes ];
+		} else {
+			$gContent = new ContactWikiIndividual();
+			$parts = explode( ' ', $label );
+			$surname = array_pop( $parts ) ?: '';
+			foreach( ContactWikiIndividual::occupationQids( $entity ) as $qid ) {
+				if( isset( ContactWikiIndividual::OCCUPATION_MAP[$qid] ) ) {
+					$contactTypes[] = ContactWikiIndividual::OCCUPATION_MAP[$qid];
+				}
+			}
+			$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1, 'contact_types' => $contactTypes ];
+		}
+		if( !$gContent->store( $storeHash ) ) {
+			return [ 'error' => implode( '; ', $gContent->mErrors ) ];
+		}
+		$gContent->reloadFromWikidata( $pQid );
+		return [ 'content' => $gContent ];
+	}
+
 	public static function extractQid( string $pInput ): ?string {
 		return preg_match( '/(Q\d+)/i', $pInput, $matches ) ? strtoupper( $matches[1] ) : null;
 	}
