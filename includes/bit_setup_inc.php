@@ -59,19 +59,12 @@ if( $gBitSystem->isPackageActive( 'contactwiki' ) ) {
 	// service name (not 'contact_content_type' above) - registerService() keys its top-level
 	// mServices array by this name, so reusing one collides and silently drops whichever
 	// registration happened first.
+	//
+	// Same service also contributes this package's section of contact's own menu - contact's
+	// menu_contact.tpl includes every 'contact_menu_tpl' generically, so the wiki tools sit inside
+	// the one Contact dropdown (only where contactwiki is active) rather than a dropdown of their own.
 	$gLibertySystem->registerService( CONTACTWIKI_PKG_NAME, CONTACTWIKI_PKG_NAME, [
 		'content_edit_mini_tpl' => 'bitpackage:contactwiki/edit_wiki_reload_inc.tpl',
-	] );
-
-	// Own app menu, so the wiki tools only appear on a site with contactwiki active and base
-	// contact's own menu needs no knowledge of this package. (An earlier attempt at this never
-	// showed up - not registerAppMenu() itself, but this whole setup file bailing out at the
-	// isPackageActive('contact') guard above whenever readdir() listed contactwiki before contact;
-	// kernel's scanPackages() now loads packages in name order.)
-	$gBitSystem->registerAppMenu( [
-		'package_name'  => CONTACTWIKI_PKG_NAME,
-		'menu_title'    => 'Wiki Contacts',
-		'index_url'     => CONTACTWIKI_PKG_URL.'list_wiki.php',
-		'menu_template' => 'bitpackage:contactwiki/menu_contactwiki.tpl',
+		'contact_menu_tpl'      => 'bitpackage:contactwiki/contact_menu_inc.tpl',
 	] );
 }
