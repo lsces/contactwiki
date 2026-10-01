@@ -46,7 +46,22 @@ class ContactWikiGroup extends ContactBusiness {
 	// NOT guessed here - add them once confirmed the same way, rather than risk a wrong mapping;
 	// until then those WBxx codes just show unticked, same as any unmapped WPxx code already does.
 	const GROUP_TYPE_MAP = [
-		'Q215380' => 'WB01', // musical group
+		'Q215380'  => 'WB01', // musical group
+		'Q5741069' => 'WB01', // rock band
+		'Q42998'   => 'WB02', // orchestra
+		'Q239582'  => 'WB02', // symphony orchestra
+		'Q131186'  => 'WB03', // choir
+		'Q2088357' => 'WB04', // musical ensemble
+		'Q1762059' => 'WB05', // film production company
+		'Q18127'   => 'WB06', // record label
+	];
+
+	// MusicBrainz's own artist type -> WBxx, for a group created from MusicBrainz alone (no Wikidata
+	// item). Only the unambiguous ones - MusicBrainz's generic 'Group' covers bands, duos, ensembles
+	// alike, so it sets nothing rather than guess.
+	const MUSICBRAINZ_TYPE_MAP = [
+		'Orchestra' => 'WB02',
+		'Choir'     => 'WB03',
 	];
 
 	public function __construct( $pContactId = NULL, $pContentId = NULL ) {
@@ -91,9 +106,8 @@ class ContactWikiGroup extends ContactBusiness {
 	public function storeXref( &$pParamHash ): bool {
 		$result = parent::storeXref( $pParamHash );
 		if( $result && ( $pParamHash['item'] ?? null ) === 'formed' ) {
-			$formedValue = trim( (string)( $pParamHash['xkey_ext'] ?? '' ) );
-			$eventTime = $formedValue !== '' ? strtotime( $formedValue ) : false;
-			if( $eventTime !== false ) {
+			$eventTime = self::dateToEventTime( (string)( $pParamHash['xkey_ext'] ?? '' ) );
+			if( $eventTime !== null ) {
 				$this->mDb->query(
 					"UPDATE `".BIT_DB_PREFIX."liberty_content` SET `event_time`=? WHERE `content_id`=?",
 					[ $eventTime, $this->mContentId ]

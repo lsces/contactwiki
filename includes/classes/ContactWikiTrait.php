@@ -114,6 +114,16 @@ trait ContactWikiTrait {
 	 */
 	public function reloadFromWikidata( ?string $pQid = null ): array {
 		$qid = $pQid ?: $this->getWikidataQid();
+		if( !$qid && ( $mbid = $this->getMusicBrainzId() ) ) {
+			// A contact created from MusicBrainz alone: Wikidata may have gained an item for it since -
+			// upgrade to the full Wikidata reload if so, otherwise refresh from MusicBrainz again.
+			$matches = self::lookupWikidataByMusicBrainzIds( [ $mbid ] )[$mbid] ?? [];
+			if( count( $matches ) === 1 ) {
+				$qid = $matches[0]['qid'];
+			} else {
+				return $this->reloadFromMusicBrainz();
+			}
+		}
 		if( !$qid ) {
 			return [ 'error' => KernelTools::tra( 'No Wikidata id known for this contact - fetch one first.' ) ];
 		}
@@ -135,6 +145,20 @@ trait ContactWikiTrait {
 		// section) - a plain 'data' key here is silently ignored.
 		$this->upsertXref( $this->mContentId, 'wikidata', [ 'xkey_ext' => $qid, 'edit' => json_encode( $entity ) ] );
 		$items[] = KernelTools::tra( 'Wikidata entity data' ).' ('.$qid.')';
+
+		$mappedTypes = [];
+		if( $this instanceof ContactWikiGroup ) {
+			foreach( ContactWikiGroup::instanceOfQids( $entity ) as $classQid ) {
+				$mappedTypes[] = ContactWikiGroup::GROUP_TYPE_MAP[$classQid] ?? null;
+			}
+		} else {
+			foreach( ContactWikiIndividual::occupationQids( $entity ) as $occupationQid ) {
+				$mappedTypes[] = ContactWikiIndividual::OCCUPATION_MAP[$occupationQid] ?? null;
+			}
+		}
+		foreach( $this->addTypeTags( $mappedTypes ) as $added ) {
+			$items[] = KernelTools::tra( 'Type tag added' ).': '.$added;
+		}
 
 		foreach( static::EXTERNAL_ID_PROPS as $item => $property ) {
 			$value = self::stringClaim( $entity, $property );
@@ -297,12 +321,151 @@ trait ContactWikiTrait {
 			}
 			$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1, 'contact_types' => $contactTypes ];
 		}
+		// Two Wikidata classes can map to the same code (orchestra + symphony orchestra -> WB02) -
+		// store each code once.
+		$storeHash['contact_types'] = array_values( array_unique( $storeHash['contact_types'] ) );
 		if( !$gContent->store( $storeHash ) ) {
 			return [ 'error' => implode( '; ', $gContent->mErrors ) ];
 		}
 		$gContent->reloadFromWikidata( $pQid );
 		return [ 'content' => $gContent ];
 	}
+
+	/**
+	 * Add any of these type-tag codes this contact doesn't carry yet - additive only, so a reload
+	 * picks up codes a growing occupation/class map now gives (a conductor gaining WP08 once that
+	 * mapping exists) without removing a tag set or kept by hand. Same xref shape Contact::store()
+	 * writes for a ticked type checkbox.
+	 *
+	 * @param list<?string> $pCodes  nulls/duplicates ignored
+	 * @return list<string>  the codes actually added
+	 */
+	protected function addTypeTags( array $pCodes ): array {
+		$have = $this->getSetTypeItems();
+		$added = [];
+		foreach( array_unique( array_filter( $pCodes ) ) as $code ) {
+			if( in_array( $code, $have, true ) ) {
+				continue;
+			}
+			$xrefHash = [ 'content_id' => $this->mContentId, 'item' => $code, 'fAddXref' => 1 ];
+			if( $this->storeXref( $xrefHash ) ) {
+				$added[] = $code;
+			}
+		}
+		return $added;
+	}
+
+	/**
+	 * This contact's own MusicBrainz artist id (its 'musicbrainz' xref), or null.
+	 */
+	public function getMusicBrainzId(): ?string {
+		$row = \Bitweaver\Liberty\LibertyContent::lookupXrefByItem( $this->mContentId, 'musicbrainz', $this->mContentTypeGuid );
+		return !empty( $row['xkey_ext'] ) ? strtolower( $row['xkey_ext'] ) : null;
+	}
+
+	/**
+	 * A stored biography date (full YYYY-MM-DD, or year/month-only YYYY / YYYY-MM as MusicBrainz and
+	 * Wikidata both give for less well documented people) as the epoch liberty_content.event_time
+	 * holds for calendar ordering - a partial date sorts at the start of its year/month. Null when
+	 * there's no usable date. (strtotime() on a bare "1955" reads it as a time of day.)
+	 */
+	public static function dateToEventTime( string $pDate ): ?int {
+		if( !preg_match( '/^(-?\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/', trim( $pDate ), $m ) ) {
+			return null;
+		}
+		$month = max( 1, (int)( $m[2] ?? 1 ) );
+		$day = max( 1, (int)( $m[3] ?? 1 ) );
+		$time = strtotime( sprintf( '%s-%02d-%02d', $m[1], $month, $day ) );
+		return $time === false ? null : $time;
+	}
+
+	/**
+	 * Create a wiki contact from MusicBrainz alone - the fallback for a credited artist with no
+	 * Wikidata item (a session player, a smaller orchestra). Every id the people pass meets comes
+	 * from MusicBrainz-tagged files, so MusicBrainz always has the artist even when Wikidata doesn't.
+	 * Individual vs group from MusicBrainz's own type; names from its sort name ("Buswell, James"),
+	 * which avoids guessing forename/surname from a display name. The 'musicbrainz' xref is the
+	 * contact's identity until a Wikidata item turns up - reloadFromWikidata() checks for one first.
+	 *
+	 * @param string $pMbid
+	 * @return array{content:object}|array{error:string}
+	 */
+	public static function createFromMusicBrainz( string $pMbid ): array {
+		$mb = self::lookupMusicBrainzArtist( $pMbid );
+		if( !$mb ) {
+			return [ 'error' => KernelTools::tra( 'Could not fetch that MusicBrainz artist.' ).' ('.$pMbid.')' ];
+		}
+		$isGroup = !in_array( $mb['type'], [ 'Person', null ], true ) || ( $mb['type'] === null && empty( $mb['gender'] ) && !str_contains( (string)$mb['sort_name'], ',' ) );
+		if( $isGroup ) {
+			$gContent = new ContactWikiGroup();
+			$contactTypes = isset( ContactWikiGroup::MUSICBRAINZ_TYPE_MAP[$mb['type']] ) ? [ ContactWikiGroup::MUSICBRAINZ_TYPE_MAP[$mb['type']] ] : [];
+			$storeHash = [ 'organisation' => $mb['name'], 'fContactTypesSubmitted' => 1, 'contact_types' => $contactTypes ];
+		} else {
+			$gContent = new ContactWikiIndividual();
+			if( preg_match( '/^([^,]+),\s*(.+)$/', (string)$mb['sort_name'], $nameParts ) ) {
+				[ , $surname, $forename ] = $nameParts;
+			} else {
+				$parts = explode( ' ', (string)$mb['name'] );
+				$surname = array_pop( $parts ) ?: '';
+				$forename = implode( ' ', $parts );
+			}
+			$storeHash = [ 'forename' => $forename, 'surname' => $surname, 'fContactTypesSubmitted' => 1, 'contact_types' => [] ];
+		}
+		if( !$gContent->store( $storeHash ) ) {
+			return [ 'error' => implode( '; ', $gContent->mErrors ) ];
+		}
+		$gContent->applyMusicBrainzData( $mb );
+		return [ 'content' => $gContent ];
+	}
+
+	/**
+	 * Re-fetch this contact's MusicBrainz artist and re-apply what it gives - the Reload path for a
+	 * contact with no Wikidata item (reloadFromWikidata() lands here when Wikidata still has none).
+	 */
+	public function reloadFromMusicBrainz(): array {
+		$mbid = $this->getMusicBrainzId();
+		if( !$mbid ) {
+			return [ 'error' => KernelTools::tra( 'No Wikidata or MusicBrainz id known for this contact.' ) ];
+		}
+		$mb = self::lookupMusicBrainzArtist( $mbid );
+		if( !$mb ) {
+			return [ 'error' => KernelTools::tra( 'Could not fetch that MusicBrainz artist.' ).' ('.$mbid.')' ];
+		}
+		return [ 'items' => $this->applyMusicBrainzData( $mb ) ];
+	}
+
+	/**
+	 * The xrefs a MusicBrainz artist record supplies: its own id, Discogs/IMDb ids from its url-rels,
+	 * and its life span as this content type's biography dates (dob/dod or formed/disbanded, see
+	 * biographyDateProps()). upsertXref(), same as reloadFromWikidata(), so a repeat is an update.
+	 *
+	 * @return list<string>  human-readable lines of what was applied
+	 */
+	public function applyMusicBrainzData( array $pMb ): array {
+		$items = [];
+		$this->upsertXref( $this->mContentId, 'musicbrainz', [ 'xkey_ext' => $pMb['mbid'] ] );
+		$items[] = 'musicbrainz: '.$pMb['mbid'];
+		foreach( [ 'discogs_artist', 'imdb' ] as $item ) {
+			if( !empty( $pMb[$item] ) && isset( static::EXTERNAL_ID_PROPS[$item] ) ) {
+				$this->upsertXref( $this->mContentId, $item, [ 'xkey_ext' => $pMb[$item] ] );
+				$items[] = $item.': '.$pMb[$item];
+			}
+		}
+		if( $this instanceof ContactWikiGroup && isset( ContactWikiGroup::MUSICBRAINZ_TYPE_MAP[$pMb['type'] ?? ''] ) ) {
+			foreach( $this->addTypeTags( [ ContactWikiGroup::MUSICBRAINZ_TYPE_MAP[$pMb['type']] ] ) as $added ) {
+				$items[] = 'type tag added: '.$added;
+			}
+		}
+		$dateItems = array_keys( $this->biographyDateProps() );
+		foreach( [ $dateItems[0] => $pMb['begin'], $dateItems[1] => $pMb['end'] ] as $item => $value ) {
+			if( !empty( $value ) ) {
+				$this->upsertXref( $this->mContentId, $item, [ 'xkey_ext' => $value ] );
+				$items[] = $item.': '.$value;
+			}
+		}
+		return $items;
+	}
+
 
 	public static function extractQid( string $pInput ): ?string {
 		return preg_match( '/(Q\d+)/i', $pInput, $matches ) ? strtoupper( $matches[1] ) : null;
@@ -393,7 +556,12 @@ trait ContactWikiTrait {
 	 * ContactWikiGroup without a second lookup. Null if the artist id doesn't resolve to a real
 	 * MusicBrainz artist at all (not just "no Wikidata link" - see the 'wikidata_qid' key for that).
 	 *
-	 * @return array{name:?string,type:?string,wikidata_qid:?string}|null
+	 * Also the extra fields createFromMusicBrainz() uses for a contact with no Wikidata item (sort
+	 * name, life span, Discogs/IMDb ids from the artist's own url-rels).
+	 *
+	 * @return array{mbid:string,name:?string,sort_name:?string,type:?string,gender:?string,
+	 *               disambiguation:?string,begin:?string,end:?string,country:?string,
+	 *               wikidata_qid:?string,discogs_artist:?string,imdb:?string}|null
 	 */
 	public static function lookupMusicBrainzArtist( string $pMbArtistId ): ?array {
 		$context = stream_context_create( [ 'http' => [
@@ -410,20 +578,40 @@ trait ContactWikiTrait {
 		if( empty( $data['id'] ) ) {
 			return null;
 		}
-		$wikidataQid = null;
+		$wikidataQid = $discogsArtist = $imdb = null;
 		foreach( $data['relations'] ?? [] as $relation ) {
-			if( ( $relation['type'] ?? null ) === 'wikidata' ) {
-				$url = $relation['url']['resource'] ?? '';
-				if( preg_match( '#/(Q\d+)$#i', $url, $matches ) ) {
-					$wikidataQid = strtoupper( $matches[1] );
+			$url = $relation['url']['resource'] ?? '';
+			switch( strtolower( $relation['type'] ?? '' ) ) {
+				case 'wikidata':
+					if( !$wikidataQid && preg_match( '#/(Q\d+)$#i', $url, $matches ) ) {
+						$wikidataQid = strtoupper( $matches[1] );
+					}
 					break;
-				}
+				case 'discogs':
+					if( !$discogsArtist && preg_match( '#/artist/(\d+)#', $url, $matches ) ) {
+						$discogsArtist = $matches[1];
+					}
+					break;
+				case 'imdb':
+					if( !$imdb && preg_match( '#/name/(nm\d+)#', $url, $matches ) ) {
+						$imdb = $matches[1];
+					}
+					break;
 			}
 		}
 		return [
-			'name'         => $data['name'] ?? null,
-			'type'         => $data['type'] ?? null,
-			'wikidata_qid' => $wikidataQid,
+			'mbid'           => $data['id'],
+			'name'           => $data['name'] ?? null,
+			'sort_name'      => $data['sort-name'] ?? null,
+			'type'           => $data['type'] ?? null,
+			'gender'         => $data['gender'] ?? null,
+			'disambiguation' => $data['disambiguation'] ?? null,
+			'begin'          => $data['life-span']['begin'] ?? null,
+			'end'            => $data['life-span']['end'] ?? null,
+			'country'        => $data['area']['iso-3166-1-codes'][0] ?? null,
+			'wikidata_qid'   => $wikidataQid,
+			'discogs_artist' => $discogsArtist,
+			'imdb'           => $imdb,
 		];
 	}
 
@@ -510,7 +698,9 @@ trait ContactWikiTrait {
 		foreach( $pEntity['claims'][$pProperty] ?? [] as $claim ) {
 			$time = $claim['mainsnak']['datavalue']['value']['time'] ?? null;
 			if( $time && preg_match( '/([+-]?\d{4}-\d{2}-\d{2})/', $time, $matches ) ) {
-				return ltrim( $matches[1], '+' );
+				// Year- or month-precision values come through as YYYY-00-00 / YYYY-MM-00 - stored
+				// as plain YYYY / YYYY-MM instead (see dateToEventTime() for the sortable form).
+				return preg_replace( '/(-00)+$/', '', ltrim( $matches[1], '+' ) );
 			}
 		}
 		return null;

@@ -74,6 +74,8 @@
 											<input type="hidden" name="qid[{$person.mbid|escape}]" value="{$person.wikidata[0].qid|escape}" />
 										{elseif $person.status == 'choose'}
 											<input type="checkbox" name="selected[]" value="{$person.mbid|escape}" />
+										{elseif $person.status == 'create_mb'}
+											<input type="checkbox" name="selected[]" value="{$person.mbid|escape}" checked="checked" />
 										{/if}
 									</td>
 									<td>
@@ -98,8 +100,8 @@
 												<br /><label><input type="radio" name="qid[{$person.mbid|escape}]" value="{$w.qid|escape}" {if $smarty.foreach.choices.first}checked="checked"{/if} />
 												<a href="https://www.wikidata.org/wiki/{$w.qid|escape}" target="_blank" rel="noopener">{$w.label|escape} ({$w.qid|escape})</a>, {if $w.is_human}{tr}individual{/tr}{else}{tr}group{/tr}{/if}</label>
 											{/foreach}
-										{elseif $person.status == 'not_on_wikidata'}
-											<span class="text-muted">{tr}Not on Wikidata - nothing to create from yet{/tr}</span>
+										{elseif $person.status == 'create_mb'}
+											{tr}Create from MusicBrainz{/tr} <span class="text-muted">({tr}not on Wikidata - a later Reload picks up a Wikidata item if one appears{/tr})</span>
 										{else}
 											<span class="text-muted">{tr}Not resolved{/tr}</span>
 										{/if}

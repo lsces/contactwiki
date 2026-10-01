@@ -42,7 +42,8 @@ class ContactWikiIndividual extends ContactPerson {
 
 	// Curated, not a mirror of Wikidata's own occupation (P106) list - only the occupations that
 	// map onto a role this system actually credits someone with on a work (fisheye's own
-	// director/writer/composer/star items, plus WPxx's own Artist/Performer music roles).
+	// director/writer/composer/star items, plus WPxx's own Artist/Performer/Conductor music roles -
+	// instrumental soloists and opera singers count as Performer).
 	// Anything else in a person's P106 list (recording artist, singer-songwriter,
 	// businessperson, ...) is simply not represented here rather than actively filtered - the
 	// picker still shows every WPxx code, ticked or not.
@@ -55,6 +56,11 @@ class ContactWikiIndividual extends ContactPerson {
 		'Q177220'   => 'WP04', // singer
 		'Q639669'   => 'WP06', // musician
 		'Q28389'    => 'WP07', // screenwriter
+		'Q486748'   => 'WP06', // pianist
+		'Q1259917'  => 'WP06', // violinist
+		'Q13219637' => 'WP06', // cellist
+		'Q2865819'  => 'WP06', // opera singer
+		'Q158852'   => 'WP08', // conductor
 	];
 
 	public function __construct( $pContactId = NULL, $pContentId = NULL ) {
@@ -105,9 +111,8 @@ class ContactWikiIndividual extends ContactPerson {
 	public function storeXref( &$pParamHash ): bool {
 		$result = parent::storeXref( $pParamHash );
 		if( $result && ( $pParamHash['item'] ?? null ) === 'dob' ) {
-			$dobValue = trim( (string)( $pParamHash['xkey_ext'] ?? '' ) );
-			$eventTime = $dobValue !== '' ? strtotime( $dobValue ) : false;
-			if( $eventTime !== false ) {
+			$eventTime = self::dateToEventTime( (string)( $pParamHash['xkey_ext'] ?? '' ) );
+			if( $eventTime !== null ) {
 				$this->mDb->query(
 					"UPDATE `".BIT_DB_PREFIX."liberty_content` SET `event_time`=? WHERE `content_id`=?",
 					[ $eventTime, $this->mContentId ]

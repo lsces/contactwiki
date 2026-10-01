@@ -66,6 +66,9 @@ if( empty( $formInfo ) ) {
 }
 
 $gContent->loadXrefInfo();
+// contact/edit.tpl reads $gContent directly (contact's own edit.php gets it assigned via
+// lookup_contact_inc.php, which this page doesn't use).
+$gBitSmarty->assign( 'gContent', $gContent );
 $gBitSmarty->assign( 'gXrefInfo', $gContent->mXrefInfo );
 $gBitSmarty->assign( 'isPerson', true );
 $gBitSmarty->assign( 'wikiReloadResult', $wikiReloadResult );
@@ -92,4 +95,4 @@ $gBitSmarty->assign( 'errors', $gContent->mErrors );
 $gBitSmarty->assign( ( !empty( $_REQUEST['tab'] ) ? $_REQUEST['tab'] : 'body' ) . 'TabSelect', 'tdefault' );
 $gBitSmarty->assign( 'show_page_bar', 'y' );
 
-$gBitSystem->display( 'bitpackage:contact/edit.tpl', 'Edit: ', [ 'display_mode' => 'edit' ] );
+$gBitSystem->display( 'bitpackage:contact/edit.tpl', KernelTools::tra( 'Edit' ).': '.$gContent->getTitle(), [ 'display_mode' => 'edit' ] );

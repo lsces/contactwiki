@@ -10,10 +10,12 @@
  *       - a contact already holding the resulting qid             -> linked (it just lacks the id)
  *       - one Wikidata item                                       -> create, pre-ticked
  *       - more than one                                           -> choose which, then create
- *       - none                                                    -> shown, nothing to create from
+ *       - none                                                    -> create from MusicBrainz, pre-ticked
  *
- * MusicBrainz itself is never called here - the tags already carry its ids, and Wikidata maps those
- * straight to a qid; the qid (with the contact_id) is what an album's credit rows end up holding.
+ * Wikidata first - the tags already carry MusicBrainz ids, and Wikidata maps those straight to a qid;
+ * the qid (with the contact_id) is what an album's credit rows end up holding. MusicBrainz itself is
+ * only called to create someone Wikidata has no item for (ContactWikiTrait::createFromMusicBrainz()),
+ * one request a second, at submit time - never during the survey.
  * Nothing is created until the list is reviewed and submitted. A created contact whose name matches
  * the gallery's own title ("Samuel Barber" or "Barber, Samuel") also gets its 'music_gallery' link.
  *
@@ -104,13 +106,25 @@ $result = null;
 if( !empty( $_REQUEST['fCreate'] ) ) {
 	$result = [ 'created' => [], 'errors' => [] ];
 	$qids = (array)( $_REQUEST['qid'] ?? [] );
+	$mbCalls = 0;
 	foreach( (array)( $_REQUEST['selected'] ?? [] ) as $mbid ) {
 		$mbid = strtolower( trim( (string)$mbid ) );
-		$qid = ContactWikiIndividual::extractQid( (string)( $qids[$mbid] ?? '' ) );
-		if( !$qid || ContactWikiIndividual::findContactByMusicBrainzId( $mbid ) || ContactWikiIndividual::findContactByWikidataQid( $qid ) ) {
+		if( !ContactWikiIndividual::extractMusicBrainzArtistId( $mbid ) || ContactWikiIndividual::findContactByMusicBrainzId( $mbid ) ) {
 			continue;
 		}
-		$created = ContactWikiIndividual::createFromWikidata( $qid );
+		$qid = ContactWikiIndividual::extractQid( (string)( $qids[$mbid] ?? '' ) );
+		if( $qid ) {
+			if( ContactWikiIndividual::findContactByWikidataQid( $qid ) ) {
+				continue;
+			}
+			$created = ContactWikiIndividual::createFromWikidata( $qid );
+		} else {
+			// No Wikidata item - MusicBrainz's own record. Its API etiquette is ~1 request/second.
+			if( $mbCalls++ ) {
+				usleep( 1100000 );
+			}
+			$created = ContactWikiIndividual::createFromMusicBrainz( $mbid );
+		}
 		if( empty( $created['content'] ) ) {
 			$result['errors'][] = [ 'mbid' => $mbid, 'error' => $created['error'] ];
 			continue;
@@ -150,7 +164,7 @@ if( $unresolved ) {
 			$people[$mbid]['contact'] = $contact;
 			$people[$mbid]['status'] = 'linked_by_qid';
 		} else {
-			$people[$mbid]['status'] = $wikidataError ? 'lookup_failed' : ( count( $matches ) === 1 ? 'create' : ( $matches ? 'choose' : 'not_on_wikidata' ) );
+			$people[$mbid]['status'] = $wikidataError ? 'lookup_failed' : ( count( $matches ) === 1 ? 'create' : ( $matches ? 'choose' : 'create_mb' ) );
 		}
 	}
 }
