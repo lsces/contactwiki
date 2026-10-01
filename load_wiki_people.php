@@ -102,15 +102,31 @@ if( !$artistDir ) {
 }
 $galleryNameForms = load_wiki_people_name_forms( $galleryTitle );
 
+// Contacts created per submit - each one is several network round trips (Wikidata entity, Wikipedia
+// summary, Commons image; MusicBrainz at ~1/s for anyone not on Wikidata), so a big gallery (a
+// compilation crediting 150+ artists) is done in small batches: the page lists only the next batch
+// still to create, and Create is pressed again until none remain. The pause between batches (page
+// reload + click) plus a short gap between people keeps Wikimedia/MusicBrainz from throttling.
+const LOAD_WIKI_PEOPLE_GAP_US = 500000;
+const LOAD_WIKI_PEOPLE_BATCH = 5;
+
 $result = null;
 if( !empty( $_REQUEST['fCreate'] ) ) {
-	$result = [ 'created' => [], 'errors' => [] ];
+	$result = [ 'created' => [], 'errors' => [], 'remaining' => 0 ];
+	$attempted = 0;
 	$qids = (array)( $_REQUEST['qid'] ?? [] );
 	$mbCalls = 0;
 	foreach( (array)( $_REQUEST['selected'] ?? [] ) as $mbid ) {
 		$mbid = strtolower( trim( (string)$mbid ) );
 		if( !ContactWikiIndividual::extractMusicBrainzArtistId( $mbid ) || ContactWikiIndividual::findContactByMusicBrainzId( $mbid ) ) {
 			continue;
+		}
+		if( $attempted >= LOAD_WIKI_PEOPLE_BATCH ) {
+			$result['remaining']++;
+			continue;
+		}
+		if( $attempted++ ) {
+			usleep( LOAD_WIKI_PEOPLE_GAP_US );
 		}
 		$qid = ContactWikiIndividual::extractQid( (string)( $qids[$mbid] ?? '' ) );
 		if( $qid ) {
@@ -175,10 +191,30 @@ foreach( $people as &$person ) {
 }
 unset( $person );
 
+// Only the next batch still to do is listed (same as load_music/load_album's own candidate lists);
+// everyone else is summarised in counts.
+$counts = [ 'linked' => 0, 'todo' => 0, 'unresolved' => 0 ];
+$nextBatch = [];
+foreach( $people as $person ) {
+	if( in_array( $person['status'], [ 'linked', 'linked_by_qid' ], true ) ) {
+		$counts['linked']++;
+	} elseif( in_array( $person['status'], [ 'create', 'create_mb', 'choose' ], true ) ) {
+		$counts['todo']++;
+		if( count( $nextBatch ) < LOAD_WIKI_PEOPLE_BATCH ) {
+			$nextBatch[] = $person;
+		}
+	} else {
+		$counts['unresolved']++;
+	}
+}
+$gBitSmarty->assign( 'counts', $counts );
+$gBitSmarty->assign( 'batchSize', LOAD_WIKI_PEOPLE_BATCH );
+
 $gBitSmarty->assign( 'galleryId', $galleryId );
 $gBitSmarty->assign( 'galleryTitle', $galleryTitle );
 $gBitSmarty->assign( 'survey', [ 'albums' => $survey['albums'], 'tracks' => $survey['tracks'], 'unreadable' => $survey['unreadable'] ] );
-$gBitSmarty->assign( 'people', array_values( $people ) );
+$gBitSmarty->assign( 'people', $nextBatch );
+$gBitSmarty->assign( 'totalPeople', count( $people ) );
 $gBitSmarty->assign( 'wikidataError', $wikidataError );
 $gBitSmarty->assign( 'result', $result );
 

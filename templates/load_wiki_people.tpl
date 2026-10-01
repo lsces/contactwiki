@@ -29,6 +29,9 @@
 						<ul>{foreach from=$result.created item=row}<li><a href="{$row.view_url|escape}">{$row.title|escape}</a></li>{/foreach}</ul>
 					</div>
 				{/if}
+				{if $result.remaining}
+					<div class="alert alert-info">{$result.remaining} {tr}more ticked people still to create - they are still ticked below, press Create Selected Contacts again to continue.{/tr}</div>
+				{/if}
 				{if $result.errors}
 					<div class="alert alert-danger">
 						<p>{tr}Failed{/tr}:</p>
@@ -48,16 +51,19 @@
 				<div class="alert alert-warning">{tr}The Wikidata lookup failed - only people already held as contacts are resolved. Try again later.{/tr}</div>
 			{/if}
 
-			<p>{$survey.albums} {tr}album folders{/tr}, {$survey.tracks} {tr}tracks{/tr}, {$people|@count} {tr}people credited{/tr}.
+			<p>{$survey.albums} {tr}album folders{/tr}, {$survey.tracks} {tr}tracks{/tr}, {$totalPeople} {tr}people credited{/tr}:
+				{$counts.linked} {tr}already contacts{/tr}, {$counts.todo} {tr}still to create{/tr}{if $counts.unresolved}, {$counts.unresolved} {tr}not resolved{/tr}{/if}.
 				<a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_people.php">{tr}Pick another gallery{/tr}</a></p>
 
 			{if $people}
 				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_people.php"}
 					<input type="hidden" name="gallery_id" value="{$galleryId}" />
+					<p>{tr}Next{/tr} {$people|@count} {tr}of{/tr} {$counts.todo}:&nbsp;
+						<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create Selected Contacts{/tr}" /></p>
 					<table class="table table-condensed">
 						<thead>
 							<tr>
-								<th></th>
+								<th><input type="checkbox" id="people-toggle-all" title="{tr}Tick or clear all{/tr}" /></th>
 								<th>{tr}Name in tags{/tr}</th>
 								<th>{tr}Albums{/tr}</th>
 								<th>{tr}Tracks{/tr}</th>
@@ -112,6 +118,19 @@
 					</table>
 					<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create Selected Contacts{/tr}" />
 				{/form}
+				<script>
+				/* Header box ticks or clears every person row; it shows ticked when they all are. Block comments only - Smarty strip may join these lines. */
+				( function() {
+					var all = document.getElementById( 'people-toggle-all' );
+					var boxes = Array.prototype.slice.call( document.querySelectorAll( 'input[name="selected[]"]' ) );
+					var sync = function() { all.checked = boxes.length > 0 && boxes.every( function( b ) { return b.checked; } ); };
+					all.addEventListener( 'change', function() { boxes.forEach( function( b ) { b.checked = all.checked; } ); } );
+					boxes.forEach( function( b ) { b.addEventListener( 'change', sync ); } );
+					sync();
+				} )();
+				</script>
+			{elseif $totalPeople}
+				<p>{tr}Nothing left to create for this gallery.{/tr}</p>
 			{else}
 				<p>{tr}No MusicBrainz-tagged people found in this gallery's albums.{/tr}</p>
 			{/if}

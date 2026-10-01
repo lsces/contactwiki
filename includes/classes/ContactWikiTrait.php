@@ -235,7 +235,7 @@ trait ContactWikiTrait {
 				'content' => http_build_query( [ 'query' => $query ] ),
 				'timeout' => 30,
 			] ] );
-			$json = @file_get_contents( 'https://query.wikidata.org/sparql', false, $context );
+			$json = self::fetchExternal( 'https://query.wikidata.org/sparql', $context );
 			if( $json === false ) {
 				return null;
 			}
@@ -556,12 +556,52 @@ trait ContactWikiTrait {
 		return "User-Agent: bitweaver-contactwiki/1.0".( !empty( $contact ) ? " ( $contact )" : '' )."\r\n";
 	}
 
+	/**
+	 * GET (or POST, per the context) an external API URL - Wikidata/Wikipedia/Commons/MusicBrainz -
+	 * retrying a throttled response. A bulk run (the people pass creating 20 contacts back to back)
+	 * can hit Wikimedia's rate limits: a 429/503 gets ONE retry after a short wait (the server's
+	 * Retry-After, capped at 5s, else 2s) - a safety net, not a long stall; small batches with a gap
+	 * between people are what actually keep clear of throttling. Returns the body, or false on any
+	 * other failure - same contract
+	 * as the bare file_get_contents() calls this replaced.
+	 *
+	 * @param string $pUrl
+	 * @param resource $pContext  stream context (headers, method, timeout)
+	 * @return string|false
+	 */
+	protected static function fetchExternal( string $pUrl, $pContext ) {
+		stream_context_set_option( $pContext, 'http', 'ignore_errors', true );
+		for( $attempt = 0; $attempt < 2; $attempt++ ) {
+			$body = @file_get_contents( $pUrl, false, $pContext );
+			$status = 0;
+			$retryAfter = 0;
+			$headers = function_exists( 'http_get_last_response_headers' ) ? ( http_get_last_response_headers() ?? [] ) : ( $http_response_header ?? [] );
+			foreach( $headers as $header ) {
+				if( preg_match( '#^HTTP/\S+\s+(\d{3})#', $header, $m ) ) {
+					$status = (int)$m[1];
+				} elseif( preg_match( '/^Retry-After:\s*(\d+)/i', $header, $m ) ) {
+					$retryAfter = (int)$m[1];
+				}
+			}
+			if( $body !== false && $status >= 200 && $status < 300 ) {
+				return $body;
+			}
+			if( !in_array( $status, [ 429, 503 ], true ) ) {
+				return false;
+			}
+			if( $attempt === 0 ) {
+				sleep( min( $retryAfter ?: 2, 5 ) );
+			}
+		}
+		return false;
+	}
+
 	public static function fetchWikidataEntity( string $pQid ): ?array {
 		$context = stream_context_create( [ 'http' => [
 			'header'  => self::userAgentHeader(),
 			'timeout' => 15,
 		] ] );
-		$json = @file_get_contents( "https://www.wikidata.org/wiki/Special:EntityData/$pQid.json", false, $context );
+		$json = self::fetchExternal( "https://www.wikidata.org/wiki/Special:EntityData/$pQid.json", $context );
 		if( $json === false ) {
 			return null;
 		}
@@ -590,7 +630,7 @@ trait ContactWikiTrait {
 			'header'  => self::userAgentHeader(),
 			'timeout' => 15,
 		] ] );
-		$json = @file_get_contents( 'https://en.wikipedia.org/api/rest_v1/page/summary/'.rawurlencode( $pTitle ), false, $context );
+		$json = self::fetchExternal( 'https://en.wikipedia.org/api/rest_v1/page/summary/'.rawurlencode( $pTitle ), $context );
 		if( $json === false ) {
 			return null;
 		}
@@ -640,9 +680,7 @@ trait ContactWikiTrait {
 			'header'  => self::userAgentHeader(),
 			'timeout' => 15,
 		] ] );
-		$json = @file_get_contents(
-			"https://musicbrainz.org/ws/2/artist/$pMbArtistId?inc=url-rels&fmt=json", false, $context
-		);
+		$json = self::fetchExternal( "https://musicbrainz.org/ws/2/artist/$pMbArtistId?inc=url-rels&fmt=json", $context );
 		if( $json === false ) {
 			return null;
 		}
@@ -802,7 +840,7 @@ trait ContactWikiTrait {
 			'follow_location' => 1,
 		] ] );
 		$url = 'https://commons.wikimedia.org/wiki/Special:FilePath/'.rawurlencode( $pFilename );
-		$bytes = @file_get_contents( $url, false, $context );
+		$bytes = self::fetchExternal( $url, $context );
 		if( $bytes === false || $bytes === '' ) {
 			return false;
 		}

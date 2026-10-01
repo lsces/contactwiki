@@ -8,15 +8,17 @@
 // (a secret token, an operator's own contact info), so they only ever live in kernel_config
 // (getConfig()/storeConfig()), never a committed file.
 $formContactWikiGeneral = [
-	"contactwiki_tmdb_token" => [
-		'label' => 'TMDb API Read Access Token',
-		'note'  => 'From themoviedb.org/settings/api - the v4 "API Read Access Token" (a long token starting eyJ...), not the shorter v3 "API Key". Used to fetch a person\'s biography when adding a Wiki Individual from a Wikidata entity. Leave blank to skip the biography fetch.',
-		'type'  => 'text',
-	],
 	"contactwiki_api_contact" => [
-		'label' => 'API Contact Info (User-Agent)',
-		'note'  => 'Wikidata/Wikipedia/MusicBrainz etiquette asks every client to identify itself with real contact info in its User-Agent string - used by every fetch this package makes to those APIs. Leave blank to send requests with no contact info (may be rate-limited or blocked).',
-		'type'  => 'text',
+		'heading' => 'Identify this site to Wikidata / Wikipedia / MusicBrainz',
+		'label'   => 'Contact address (User-Agent)',
+		'note'    => 'An email address or URL these services can reach you at - added to the User-Agent of every request this package makes to Wikidata, Wikipedia, Wikimedia Commons and MusicBrainz, as their etiquette asks. Not a key or password. Leave blank and requests go out anonymous, which those services throttle or block sooner.',
+		'type'    => 'text',
+	],
+	"contactwiki_tmdb_token" => [
+		'heading' => 'TMDb - optional, not currently used',
+		'label'   => 'TMDb API Read Access Token',
+		'note'    => 'Unrelated to the contact address above: a secret token from themoviedb.org/settings/api (the long v4 "API Read Access Token" starting eyJ..., not the shorter v3 "API Key"). Nothing uses it at present - biographies come from Wikipedia - it is kept for possible future film/TV person biographies. Can be left blank.',
+		'type'    => 'text',
 	],
 ];
 $gBitSmarty->assign( 'formContactWikiGeneral', $formContactWikiGeneral );
