@@ -12,6 +12,7 @@
 			{form class="find" legend="Find in Wiki Contacts" id="data_options"}
 				<input type="hidden" name="sort_mode" value="{$smarty.request.sort_mode|escape}" />
 				<label class="col-md-6 col-sm-6 col-xs-12">{tr}Name{/tr}:&nbsp;<input size="24" type="text" name="find_title" value="{$smarty.request.find_title|escape}" /></label>
+				{include file="bitpackage:contact/list_filter_inc.tpl"}
 				<div class="col-md-3 col-sm-3 col-xs-12">
 					<input type="submit" name="search" value="{tr}Find{/tr}" />&nbsp;
 					<input type="button" onclick="location.href='{$smarty.const.CONTACTWIKI_PKG_URL}list_wiki.php'" value="{tr}Reset{/tr}" />

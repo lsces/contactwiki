@@ -23,11 +23,21 @@ $gBitSystem->verifyPermission( 'p_contact_view' );
 
 $listContent = new Contact();
 $listHash = $_REQUEST;
-$listHash['content_type_guid'] = [ CONTACTWIKIINDIVIDUAL_CONTENT_TYPE_GUID, CONTACTWIKIGROUP_CONTENT_TYPE_GUID ];
+$wikiGuids = [ CONTACTWIKIINDIVIDUAL_CONTENT_TYPE_GUID, CONTACTWIKIGROUP_CONTENT_TYPE_GUID ];
 if( empty( $listHash['sort_mode'] ) ) {
 	$listHash['sort_mode'] = 'title_asc';
 }
+// Same two-stage class/type filter list_contacts.php uses (Contact::applyListFilter()), offered
+// over just the two wiki classes - Composer/Conductor/Orchestra/... within them.
+$listFilter = Contact::applyListFilter( $listHash, $_REQUEST, $wikiGuids );
 $listWiki = $listContent->getList( $listHash );
+if( $listFilter['classes'] ) {
+	$listHash['listInfo']['ihash']['content_class'] = implode( ',', $listFilter['classes'] );
+}
+if( $listFilter['items'] ) {
+	$listHash['listInfo']['ihash']['xref_items'] = implode( ',', $listFilter['items'] );
+}
+$gBitSmarty->assign( 'filterOptions', Contact::getListFilterOptions( $wikiGuids, $listFilter ) );
 
 // Dates and the Wikidata id for this page's rows in one read, not a query per row - all four date
 // items and the qid keep their value in xkey_ext, which LibertyContent::lookupXrefValues() (xkey
