@@ -108,7 +108,7 @@ $galleryNameForms = load_wiki_people_name_forms( $galleryTitle );
 // still to create, and Create is pressed again until none remain. The pause between batches (page
 // reload + click) plus a short gap between people keeps Wikimedia/MusicBrainz from throttling.
 const LOAD_WIKI_PEOPLE_GAP_US = 500000;
-const LOAD_WIKI_PEOPLE_BATCH = 5;
+const LOAD_WIKI_PEOPLE_BATCH = 10;
 
 $result = null;
 if( !empty( $_REQUEST['fCreate'] ) ) {
