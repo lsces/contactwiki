@@ -66,6 +66,9 @@ if( $gBitSystem->isPackageActive( 'contactwiki' ) ) {
 	$gLibertySystem->registerService( CONTACTWIKI_PKG_NAME, CONTACTWIKI_PKG_NAME, [
 		'content_edit_mini_tpl' => 'bitpackage:contactwiki/edit_wiki_reload_inc.tpl',
 		'contact_menu_tpl'      => 'bitpackage:contactwiki/contact_menu_inc.tpl',
+		// Fills wiki rows of contact's list pages with their summary (types, dates, Wikidata,
+		// gallery) - see ContactWikiTrait::enrichListRows() and list_summary_inc.tpl.
+		'contact_list_row_function' => 'Bitweaver\\Contactwiki\\ContactWikiIndividual::enrichListRows',
 		// Which of this package's own type codes say what job a person does on a recording - read
 		// generically (getServiceValues('credit_role_map')) by fisheyemedia when it sorts an album's
 		// credits into artist/composer/conductor/orchestra/performer, so it never needs to know

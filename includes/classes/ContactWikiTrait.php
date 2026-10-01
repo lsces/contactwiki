@@ -467,6 +467,78 @@ trait ContactWikiTrait {
 	}
 
 
+	/**
+	 * Fill contact list rows for wiki individuals/groups with what their list summary shows - type
+	 * names (Composer, Orchestra...), biography dates, Wikidata qid, linked music gallery - in a few
+	 * bulk reads for the whole page, not per row. Rows of any other content type are left untouched.
+	 * Registered as contact's 'contact_list_row_function' (list_contacts.php's Information column,
+	 * rendered with list_summary_inc.tpl) and used directly by list_wiki.php for its columns.
+	 *
+	 * @param array &$pRows  getList() result rows (content_id, content_type_guid, ...)
+	 */
+	public static function enrichListRows( array &$pRows ): void {
+		global $gBitDb;
+		$wikiGuids = [ CONTACTWIKIINDIVIDUAL_CONTENT_TYPE_GUID, CONTACTWIKIGROUP_CONTENT_TYPE_GUID ];
+		$ids = [];
+		foreach( $pRows as $row ) {
+			if( in_array( $row['content_type_guid'] ?? '', $wikiGuids, true ) ) {
+				$ids[] = (int)$row['content_id'];
+			}
+		}
+		if( !$ids ) {
+			return;
+		}
+		// code => name for both wiki classes' type tags
+		$typeNames = [];
+		foreach( $wikiGuids as $guid ) {
+			foreach( ( new \Bitweaver\Liberty\LibertyXrefType( $guid ) )->getTypeMarkers() as $marker ) {
+				$typeNames[$marker['item']] = $marker['name'];
+			}
+		}
+		$items = array_merge( [ 'dob', 'dod', 'formed', 'disbanded', 'wikidata', 'musicbrainz', 'music_gallery' ], array_keys( $typeNames ) );
+		$rows = $gBitDb->getAll(
+			"SELECT `content_id`, `item`, `xref`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref`
+			 WHERE `end_date` IS NULL AND `content_id` IN (".implode( ',', array_fill( 0, count( $ids ), '?' ) ).")
+			 AND `item` IN (".implode( ',', array_fill( 0, count( $items ), '?' ) ).") ORDER BY `item`",
+			array_merge( $ids, $items )
+		);
+		$byContent = [];
+		foreach( $rows as $x ) {
+			$byContent[$x['content_id']][] = $x;
+		}
+		foreach( $pRows as &$row ) {
+			if( !in_array( $row['content_type_guid'] ?? '', $wikiGuids, true ) ) {
+				continue;
+			}
+			$isGroup = $row['content_type_guid'] === CONTACTWIKIGROUP_CONTENT_TYPE_GUID;
+			$summary = [ 'is_group' => $isGroup, 'types' => [], 'date_from' => null, 'date_to' => null, 'qid' => null, 'mbid' => null, 'gallery_url' => null ];
+			foreach( $byContent[$row['content_id']] ?? [] as $x ) {
+				switch( $x['item'] ) {
+					case 'dob': case 'formed':        $summary['date_from'] = $x['xkey_ext']; break;
+					case 'dod': case 'disbanded':     $summary['date_to'] = $x['xkey_ext']; break;
+					case 'wikidata':                  $summary['qid'] = $x['xkey_ext']; break;
+					case 'musicbrainz':               $summary['mbid'] = $x['xkey_ext']; break;
+					case 'music_gallery':
+						if( !empty( $x['xref'] ) ) {
+							$summary['gallery_url'] = BIT_ROOT_URL.'index.php?content_id='.(int)$x['xref'];
+						}
+						break;
+					default:
+						// Once each - a type tag stored twice (before creation de-duplicated them)
+						// shouldn't read "Orchestra, Orchestra".
+						if( isset( $typeNames[$x['item']] ) && !in_array( $typeNames[$x['item']], $summary['types'], true ) ) {
+							$summary['types'][] = $typeNames[$x['item']];
+						}
+				}
+			}
+			$row['wiki_summary'] = $summary;
+			$row['summary_tpl'] = 'bitpackage:contactwiki/list_summary_inc.tpl';
+			$row['view_url'] = CONTACTWIKI_PKG_URL.'view.php?content_id='.$row['content_id'];
+		}
+		unset( $row );
+	}
+
+
 	public static function extractQid( string $pInput ): ?string {
 		return preg_match( '/(Q\d+)/i', $pInput, $matches ) ? strtoupper( $matches[1] ) : null;
 	}
