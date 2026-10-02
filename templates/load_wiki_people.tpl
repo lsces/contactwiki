@@ -48,7 +48,7 @@
 				</div>
 			{/if}
 			{if $wikidataError}
-				<div class="alert alert-warning">{tr}The Wikidata lookup failed - only people already held as contacts are resolved. Try again later.{/tr}</div>
+				<div class="alert alert-warning">{tr}The Wikidata lookup failed - only people already held as contacts are resolved. Try again later.{/tr}{if $wikidataErrorReason}<br /><small>{tr}Reason{/tr}: {$wikidataErrorReason|escape}</small>{/if}</div>
 			{/if}
 
 			<p>{$survey.albums} {tr}album folders{/tr}, {$survey.tracks} {tr}tracks{/tr}, {$totalPeople} {tr}people credited{/tr}:

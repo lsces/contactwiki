@@ -556,6 +556,9 @@ trait ContactWikiTrait {
 		return "User-Agent: bitweaver-contactwiki/1.0".( !empty( $contact ) ? " ( $contact )" : '' )."\r\n";
 	}
 
+	/** @var string|null reason the last fetchExternal() call failed, see getLastFetchError() */
+	protected static ?string $lastFetchError = null;
+
 	/**
 	 * GET (or POST, per the context) an external API URL - Wikidata/Wikipedia/Commons/MusicBrainz -
 	 * retrying a throttled response. A bulk run (the people pass creating 20 contacts back to back)
@@ -571,8 +574,19 @@ trait ContactWikiTrait {
 	 */
 	protected static function fetchExternal( string $pUrl, $pContext ) {
 		stream_context_set_option( $pContext, 'http', 'ignore_errors', true );
+		self::$lastFetchError = null;
+		$host = parse_url( $pUrl, PHP_URL_HOST );
 		for( $attempt = 0; $attempt < 2; $attempt++ ) {
-			$body = @file_get_contents( $pUrl, false, $pContext );
+			$started = microtime( true );
+			// A failed request raises several warnings (getaddrinfo, SSL, timeout...) and the last is
+			// the least useful ("operation failed") - keep them all for the reason.
+			$warnings = [];
+			set_error_handler( function( $no, $msg ) use ( &$warnings ) {
+				$warnings[] = preg_replace( '/^file_get_contents\([^)]*\):\s*/', '', $msg );
+				return true;
+			} );
+			$body = file_get_contents( $pUrl, false, $pContext );
+			restore_error_handler();
 			$status = 0;
 			$retryAfter = 0;
 			$headers = function_exists( 'http_get_last_response_headers' ) ? ( http_get_last_response_headers() ?? [] ) : ( $http_response_header ?? [] );
@@ -586,14 +600,35 @@ trait ContactWikiTrait {
 			if( $body !== false && $status >= 200 && $status < 300 ) {
 				return $body;
 			}
-			if( !in_array( $status, [ 429, 503 ], true ) ) {
+			if( $status === 0 ) {
+				// No HTTP response at all - timeout, DNS or connection failure.
+				self::$lastFetchError = sprintf( '%s: no response after %.0fs (%s)', $host, microtime( true ) - $started,
+					$warnings ? implode( '; ', array_unique( $warnings ) ) : 'unknown network error' );
 				return false;
 			}
+			if( !in_array( $status, [ 429, 503 ], true ) ) {
+				// The service answered with an error - its own text says why (e.g. a query timeout).
+				$text = trim( preg_replace( '/\s+/', ' ', strip_tags( (string)$body ) ) );
+				self::$lastFetchError = "$host: HTTP $status".( $text !== '' ? ' - '.mb_substr( $text, 0, 160 ) : '' );
+				return false;
+			}
+			self::$lastFetchError = "$host: HTTP $status - throttled, still refused after one retry"
+				.( $retryAfter ? " (asked to wait {$retryAfter}s)" : '' ).'; try again in a minute';
 			if( $attempt === 0 ) {
 				sleep( min( $retryAfter ?: 2, 5 ) );
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Why the last fetchExternal() call failed - timeout/network, the service's own HTTP error, or
+	 * throttling - for showing beside a "lookup failed" message. Null after a successful call.
+	 *
+	 * @return string|null
+	 */
+	public static function getLastFetchError(): ?string {
+		return self::$lastFetchError;
 	}
 
 	public static function fetchWikidataEntity( string $pQid ): ?array {

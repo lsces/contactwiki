@@ -224,6 +224,7 @@ $gBitSmarty->assign( 'survey', [ 'albums' => $survey['albums'], 'tracks' => $sur
 $gBitSmarty->assign( 'people', $nextBatch );
 $gBitSmarty->assign( 'totalPeople', count( $people ) );
 $gBitSmarty->assign( 'wikidataError', $wikidataError );
+$gBitSmarty->assign( 'wikidataErrorReason', $wikidataError ? ContactWikiIndividual::getLastFetchError() : null );
 $gBitSmarty->assign( 'result', $result );
 
 $gBitSystem->display( 'bitpackage:contactwiki/load_wiki_people.tpl', KernelTools::tra( 'Load Wiki People' ).': '.$galleryTitle, [ 'display_mode' => 'edit' ] );
