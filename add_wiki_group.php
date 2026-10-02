@@ -87,7 +87,7 @@ $wikiImageFilename = $_REQUEST['wikidata_image'] ?? null;
 $wikiSitelink = null;
 
 if( $wikiEntity ) {
-	$_REQUEST['organisation'] = trim( $wikiEntity['labels']['en']['value'] ?? '' );
+	$_REQUEST['organisation'] = ContactWikiGroup::entityLabel( $wikiEntity );
 
 	foreach( ContactWikiGroup::EXTERNAL_ID_PROPS as $item => $property ) {
 		$value = ContactWikiGroup::stringClaim( $wikiEntity, $property );

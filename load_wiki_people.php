@@ -146,7 +146,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			continue;
 		}
 		$gContent = $created['content'];
-		if( array_intersect( load_wiki_people_name_forms( $gContent->getTitle() ), $galleryNameForms ) ) {
+		if( array_intersect( load_wiki_people_name_forms( (string)$gContent->getTitle() ), $galleryNameForms ) ) {
 			$gContent->upsertXref( $gContent->mContentId, 'music_gallery', [ 'xref' => $gallery->mContentId ] );
 		}
 		$result['created'][] = [ 'title' => $gContent->getTitle(), 'view_url' => $gContent->getDisplayUrl() ];

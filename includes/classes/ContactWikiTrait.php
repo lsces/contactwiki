@@ -281,6 +281,29 @@ trait ContactWikiTrait {
 	}
 
 	/**
+	 * A Wikidata entity's display name: English first, then 'mul' (the language-independent label
+	 * Wikidata now gives many people and bands instead of an English one - Busta Rhymes, Megadeth),
+	 * then the other English variants, then whatever label it has. '' only when it has none.
+	 *
+	 * @param array $pEntity  entity JSON (fetchWikidataEntity())
+	 * @return string
+	 */
+	public static function entityLabel( array $pEntity ): string {
+		$labels = $pEntity['labels'] ?? [];
+		foreach( [ 'en', 'mul', 'en-gb', 'en-us', 'en-ca' ] as $lang ) {
+			if( !empty( $labels[$lang]['value'] ) && trim( $labels[$lang]['value'] ) !== '' ) {
+				return trim( $labels[$lang]['value'] );
+			}
+		}
+		foreach( $labels as $label ) {
+			if( trim( $label['value'] ?? '' ) !== '' ) {
+				return trim( $label['value'] );
+			}
+		}
+		return '';
+	}
+
+	/**
 	 * Create a wiki contact from a Wikidata item and apply everything reloadFromWikidata() derives
 	 * (external ids - including 'musicbrainz', so the new contact is matchable by MusicBrainz id
 	 * straight away - biography, dates, image). Individual or group: $pIsGroup when the caller
@@ -298,7 +321,10 @@ trait ContactWikiTrait {
 		if( !$entity ) {
 			return [ 'error' => KernelTools::tra( 'Could not fetch that Wikidata entity.' ).' ('.$pQid.')' ];
 		}
-		$label = trim( $entity['labels']['en']['value'] ?? '' );
+		$label = self::entityLabel( $entity );
+		if( $label === '' ) {
+			return [ 'error' => KernelTools::tra( 'That Wikidata item has no name in any language.' ).' ('.$pQid.')' ];
+		}
 		$isGroup = $pIsGroup ?? !in_array( 'Q5', self::itemClaimQids( $entity, 'P31' ), true );
 
 		$contactTypes = [];

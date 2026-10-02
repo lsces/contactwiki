@@ -115,7 +115,7 @@ $wikiImageFilename = $_REQUEST['wikidata_image'] ?? null;
 $wikiSitelink = null;
 
 if( $wikiEntity ) {
-	$label = $wikiEntity['labels']['en']['value'] ?? '';
+	$label = ContactWikiIndividual::entityLabel( $wikiEntity );
 	$parts = explode( ' ', trim( $label ) );
 	$_REQUEST['surname']  = array_pop( $parts ) ?: '';
 	$_REQUEST['forename'] = implode( ' ', $parts );
