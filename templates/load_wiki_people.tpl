@@ -101,7 +101,7 @@
 											{tr}Create{/tr} {if $person.wikidata[0].is_human}{tr}individual{/tr}{else}{tr}group{/tr}{/if}:
 											<a href="https://www.wikidata.org/wiki/{$person.wikidata[0].qid|escape}" target="_blank" rel="noopener">{$person.wikidata[0].label|escape} ({$person.wikidata[0].qid|escape})</a>
 										{elseif $person.status == 'choose'}
-											{tr}More than one Wikidata item has this MusicBrainz id - choose{/tr}:
+											{tr}Wikidata has this MusicBrainz id on more than one item (a duplicate on Wikidata's side, not MusicBrainz) - choose the right one{/tr}:
 											{foreach from=$person.wikidata item=w name=choices}
 												<br /><label><input type="radio" name="qid[{$person.mbid|escape}]" value="{$w.qid|escape}" {if $smarty.foreach.choices.first}checked="checked"{/if} />
 												<a href="https://www.wikidata.org/wiki/{$w.qid|escape}" target="_blank" rel="noopener">{$w.label|escape} ({$w.qid|escape})</a>, {if $w.is_human}{tr}individual{/tr}{else}{tr}group{/tr}{/if}</label>
