@@ -81,5 +81,16 @@ if( $gBitSystem->isPackageActive( 'contactwiki' ) ) {
 			'WB03' => 'performer', // choir
 			'WB04' => 'performer', // ensemble
 		],
+		// Per-artist actions offered by fisheyemedia's music pages (read generically via
+		// getServiceValues('music_artist_tools')) - 'url' gets the artist gallery's gallery_id
+		// appended, so the people pass opens straight on that artist's folder.
+		'music_artist_tools'    => [
+			[
+				'title' => 'Load its contacts',
+				'url'   => CONTACTWIKI_PKG_URL.'load_wiki_people.php?gallery_id=',
+				'icon'  => 'system-users',
+				'perm'  => 'p_contact_update',
+			],
+		],
 	] );
 }
