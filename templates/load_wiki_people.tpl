@@ -134,6 +134,9 @@
 			{else}
 				<p>{tr}No MusicBrainz-tagged people found in this gallery's albums.{/tr}</p>
 			{/if}
+			{if !$people}
+				<p><a class="btn btn-primary" href="{$albumsUrl|escape}">{tr}Continue: Load albums{/tr}</a></p>
+			{/if}
 		{/if}
 
 	</div>

@@ -207,6 +207,14 @@ foreach( $people as $person ) {
 		$counts['unresolved']++;
 	}
 }
+// Next step of the one-folder-at-a-time music workflow (load_music.php -> here -> albums). A
+// Create that leaves nothing to do - no failures, nobody unresolved, Wikidata answering - goes
+// straight on to the album import; anything else stays here to be seen, with a Continue button.
+$albumsUrl = FISHEYEMEDIA_PKG_URL.'load_album.php?gallery_id='.$galleryId;
+if( $result && !$result['errors'] && !$result['remaining'] && !$counts['todo'] && !$counts['unresolved'] && !$wikidataError ) {
+	KernelTools::bit_redirect( $albumsUrl );
+}
+$gBitSmarty->assign( 'albumsUrl', $albumsUrl );
 $gBitSmarty->assign( 'counts', $counts );
 $gBitSmarty->assign( 'batchSize', LOAD_WIKI_PEOPLE_BATCH );
 
