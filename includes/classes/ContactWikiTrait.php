@@ -424,7 +424,9 @@ trait ContactWikiTrait {
 		$isGroup = !in_array( $mb['type'], [ 'Person', null ], true ) || ( $mb['type'] === null && empty( $mb['gender'] ) && !str_contains( (string)$mb['sort_name'], ',' ) );
 		if( $isGroup ) {
 			$gContent = new ContactWikiGroup();
-			$contactTypes = isset( ContactWikiGroup::MUSICBRAINZ_TYPE_MAP[$mb['type']] ) ? [ ContactWikiGroup::MUSICBRAINZ_TYPE_MAP[$mb['type']] ] : [];
+			// MusicBrainz can leave an artist's type unset (null) - not a valid array key.
+			$mbType = (string)( $mb['type'] ?? '' );
+			$contactTypes = isset( ContactWikiGroup::MUSICBRAINZ_TYPE_MAP[$mbType] ) ? [ ContactWikiGroup::MUSICBRAINZ_TYPE_MAP[$mbType] ] : [];
 			$storeHash = [ 'organisation' => $mb['name'], 'fContactTypesSubmitted' => 1, 'contact_types' => $contactTypes ];
 		} else {
 			$gContent = new ContactWikiIndividual();
