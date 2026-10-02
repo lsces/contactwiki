@@ -25,6 +25,9 @@ with everything Wikidata/Wikipedia can supply.
   before saving
 - **Reload from Wikidata** on an already-created record — re-runs the same fetch-then-apply pass to
   pick up anything changed on Wikidata since
+- **People pass for one artist/composer gallery** (`load_wiki_people.php`) - lists everyone
+  credited across its albums, matched against existing contacts, Wikidata and MusicBrainz, and
+  creates them in batches; part of fisheyemedia's one-folder music loading
 - **Batch survey of an existing music library** (`load_wiki_artists.php`) — scans every top-level
   artist/composer gallery in a [fisheye](https://github.com/lsces/fisheye)-backed music collection,
   shows which already have a linked Contact, and for the rest, resolves a MusicBrainz artist id
@@ -34,9 +37,9 @@ with everything Wikidata/Wikipedia can supply.
   Band/Orchestra/Choir/Ensemble/Production Company/Record Label for a group) derived from Wikidata's
   own occupation/instance-of claims, shown as pre-ticked checkboxes rather than applied silently
 
-See [`MANUAL.md`](MANUAL.md) for the full design — the broader "Contact as a universal person/
-entity hub" idea this package is one implementation of, the Wikidata property mapping, and what
-isn't built yet (Film/TV credit-to-Contact retrofit, further external-source integration).
+See [`MANUAL.md`](MANUAL.md) for how to use it, and [`DEVELOPER.md`](DEVELOPER.md) for the design -
+the "Contact as a universal person/entity hub" idea this package implements, the Wikidata property
+mapping, the services it provides - and what isn't built yet.
 
 ## What's planned
 
@@ -61,5 +64,5 @@ isn't built yet (Film/TV credit-to-Contact retrofit, further external-source int
   etiquette requirements, and an optional TMDb token for a person's biography fallback, are both
   configured on this package's own admin settings page
 
-Since this package isn't through a stable install/upgrade cycle yet, see `MANUAL.md` in this repo
-for the current schema-deployment approach if you're installing it fresh.
+Since this package isn't through a stable install/upgrade cycle yet, see `DEVELOPER.md` in this
+repo for the current schema-deployment approach if you're installing it fresh.

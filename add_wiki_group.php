@@ -6,7 +6,7 @@
  * and a downloaded P18 image - same two-step fetch-then-save flow and shared
  * ContactWikiTrait::reloadFromWikidata() cascade as add_wiki_person.php, adapted for a group's own
  * plain organisation-name storage (no forename/surname/NAME xref) instead of a person's. See
- * contactwiki/MANUAL.md.
+ * contactwiki/DEVELOPER.md.
  *
  * @package contactwiki
  * @subpackage functions

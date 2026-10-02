@@ -11,7 +11,7 @@
  * promoted when identical across every track, so a various-artists compilation won't have one),
  * then resolves it via ContactWikiTrait::lookupMusicBrainzArtist() - MusicBrainz's own artist type
  * (Person/Group) decides which class to create, and its own 'wikidata' url-rel supplies the qid
- * without a separate manual Wikidata search (see contactwiki/MANUAL.md's own "Finding the Wikidata
+ * without a separate manual Wikidata search (see contactwiki/DEVELOPER.md's "Wikidata reload" section on finding the Wikidata
  * id without searching for it" section).
  *
  * Nothing is created until this list is reviewed and submitted - a gallery with no mb_artistid at

@@ -5,7 +5,7 @@
 // for fisheye_gallery/fisheye_image. No liberty_xref_group/liberty_xref_item defaults registered
 // here either - WPxx/WBxx role tags, external-identity links, biography dates and the
 // 'music_gallery' link are all applied privately per-site instead via LibertyXrefScheme::apply()
-// (liberty), same as before the split - see contactwiki/MANUAL.md.
+// (liberty), same as before the split - see contactwiki/DEVELOPER.md.
 
 global $gBitInstaller;
 

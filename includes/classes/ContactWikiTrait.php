@@ -646,7 +646,7 @@ trait ContactWikiTrait {
 
 	/**
 	 * The enwiki sitelink Wikidata's own entity carries (separate from claims entirely - see
-	 * contactwiki/MANUAL.md's own "What actually answers 'what populates the bio'" section), title
+	 * contactwiki/DEVELOPER.md's "Wikidata reload" section), title
 	 * form ("Fleetwood_Mac", underscores not spaces) ready to hand straight to Wikipedia's own REST
 	 * summary endpoint. Null when this entity has no English Wikipedia article at all.
 	 */

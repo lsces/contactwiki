@@ -1,7 +1,7 @@
 <?php
 /**
  * A real person credited on a work somewhere in the system (music/film/TV to start, see
- * contactwiki/MANUAL.md), backed by data pulled from Wikidata and its own external identity
+ * contactwiki/DEVELOPER.md), backed by data pulled from Wikidata and its own external identity
  * links - content_type_guid='contactwikiindi', own xref vocabulary (WPxx role tags,
  * external-identity links, biography) registered via a site's own local
  * config/local/xref_schemes/contact.php, not this package's public schema_inc.php.

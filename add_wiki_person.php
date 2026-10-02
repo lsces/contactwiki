@@ -3,7 +3,7 @@
  * Add a ContactWikiIndividual seeded from a Wikidata entity - name, WPxx role-tag suggestions (from
  * ContactWikiIndividual::OCCUPATION_MAP, a curated lookup, not a raw mirror of Wikidata's own
  * broader occupation list), the external-identity links, dob/dod, a downloaded P18 image, and a
- * TMDb-fetched biography, all documented at contactwiki/MANUAL.md. Two-step flow: fetch shows an
+ * TMDb-fetched biography, all documented at contactwiki/DEVELOPER.md. Two-step flow: fetch shows an
  * editable, pre-filled version of the normal add_person.php form (nothing is written until Save),
  * Save stores the contact exactly like add_person.php does, then hands off to
  * ContactWikiIndividual::reloadFromWikidata() to lay every xref on top - the same fetch-then-apply
