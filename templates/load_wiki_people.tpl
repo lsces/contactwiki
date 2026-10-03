@@ -85,7 +85,7 @@
 										{/if}
 									</td>
 									<td>
-										{if $person.names}{$person.names|join:' / '|escape}{else}<span class="text-muted">{tr}(no name in tags){/tr}</span>{/if}
+										{if $person.names}{$person.names|join:' / '|escape}{elseif $person.contact}{$person.contact.title|escape}{elseif $person.wikidata[0].label}{$person.wikidata[0].label|escape}{else}<span class="text-muted">{tr}(no name in tags){/tr}</span>{/if}
 										<br /><a class="small text-muted" href="https://musicbrainz.org/artist/{$person.mbid|escape}" target="_blank" rel="noopener">{$person.mbid|escape}</a>
 									</td>
 									<td>{$person.albums}</td>
