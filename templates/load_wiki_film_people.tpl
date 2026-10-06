@@ -70,7 +70,7 @@
 			{if $reloadResult}
 				<div class="alert alert-success">
 					<p>{$reloadResult.seasons|@count} {tr}seasons reloaded from Plex{/tr} ({$reloadResult.episodes} {tr}episodes{/tr}), {tr}credit directories rebuilt{/tr}:</p>
-					<ul>{foreach from=$reloadResult.seasons item=rs}<li>{$rs.title|escape} - {if $rs.matched}{$rs.episodes} {tr}episodes{/tr}{else}{tr}no Plex match, episodes re-read from disk{/tr}{/if}</li>{/foreach}</ul>
+					<ul>{foreach from=$reloadResult.seasons item=rs}<li>{$rs.title|escape} - {if $rs.matched}{$rs.episodes} {tr}episodes{/tr}, {$rs.seconds}s{else}{tr}no Plex match, episodes re-read from disk{/tr}{/if}</li>{/foreach}</ul>
 					{if $reloadResult.next !== null}
 						{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
 							{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
@@ -94,7 +94,7 @@
 				{/form}</p>
 		{/if}
 
-		<p>{$survey.films} {if $scope == 'tv'}{tr}seasons and the show{/tr}{else}{tr}films{/tr}{/if}, {$survey.credits} {tr}credits{/tr}, {$survey.people} {tr}distinct people{/tr}:
+		<p>{if $scope == 'tv'}{$program.seasons} {tr}seasons and the show{/tr}{else}{$survey.films} {tr}films{/tr}{/if}, {$survey.credits} {tr}credits{/tr}, {$survey.people} {tr}distinct people{/tr}:
 			{$counts.linked} {tr}already linked to a contact{/tr}, {$counts.match} {tr}matching one contact by name{/tr},
 			{$counts.choose} {tr}matching several{/tr}, {$counts.unmatched} {tr}with no contact yet{/tr}.</p>
 

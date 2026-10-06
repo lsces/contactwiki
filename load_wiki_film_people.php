@@ -70,7 +70,7 @@ if( $scope === 'tv' && !$programId ) {
 $program = null;
 $contentIds = null;
 if( $scope === 'tv' ) {
-	foreach( FisheyeCredits::programOverview() as $candidateProgram ) {
+	foreach( FisheyeCredits::programOverview( $programId ) as $candidateProgram ) {
 		if( $candidateProgram['content_id'] === $programId ) {
 			$program = $candidateProgram;
 		}
@@ -122,7 +122,7 @@ if( $scope === 'tv' && !empty( $_REQUEST['fBuild'] ) ) {
 		$buildResult['seasons']++;
 	}
 	// The picker's own counts are stale after a build.
-	foreach( FisheyeCredits::programOverview() as $candidateProgram ) {
+	foreach( FisheyeCredits::programOverview( $programId ) as $candidateProgram ) {
 		if( $candidateProgram['content_id'] === $programId ) {
 			$program = $candidateProgram;
 		}
@@ -135,13 +135,14 @@ if( $scope === 'tv' && !empty( $_REQUEST['fReload'] ) ) {
 	$reloadResult = [ 'seasons' => [], 'episodes' => 0, 'next' => null, 'total' => count( $seasonIds ) ];
 	$reloadStarted = microtime( true );
 	for( $i = max( 0, (int)( $_REQUEST['rl'] ?? 0 ) ); $i < count( $seasonIds ); $i++ ) {
-		if( $reloadResult['episodes'] >= 30 || microtime( true ) - $reloadStarted > 25 ) {
+		if( microtime( true ) - $reloadStarted > 25 ) {
 			$reloadResult['next'] = $i;
 			break;
 		}
+		$seasonStarted = microtime( true );
 		$season = new FisheyeSeason( null, $seasonIds[$i] );
 		$season->load();
-		$reloaded = $season->reloadPlexEpisodes();
+		$reloaded = $season->reloadPlexEpisodes( true );
 		// Episode titles are only searchable through the season's own index words - same refresh
 		// edit_season.php's Reload Episodes does.
 		if( $gBitSystem->isPackageActive( 'search' ) ) {
@@ -149,10 +150,11 @@ if( $scope === 'tv' && !empty( $_REQUEST['fReload'] ) ) {
 			\Bitweaver\Liberty\refresh_index( $season );
 		}
 		$episodeCount = (int)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'episode' AND `end_date` IS NULL", [ $seasonIds[$i] ] );
-		$reloadResult['seasons'][] = [ 'title' => $season->getTitle(), 'matched' => !empty( $reloaded['matched'] ), 'episodes' => $episodeCount ];
+		$reloadResult['seasons'][] = [ 'title' => $season->getTitle(), 'matched' => !empty( $reloaded['matched'] ), 'episodes' => $episodeCount,
+			'seconds' => round( microtime( true ) - $seasonStarted, 1 ) ];
 		$reloadResult['episodes'] += $episodeCount;
 	}
-	foreach( FisheyeCredits::programOverview() as $candidateProgram ) {
+	foreach( FisheyeCredits::programOverview( $programId ) as $candidateProgram ) {
 		if( $candidateProgram['content_id'] === $programId ) {
 			$program = $candidateProgram;
 		}
