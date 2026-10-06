@@ -24,6 +24,27 @@
 			{/if}
 		{/if}
 
+		{if $createResult}
+			{if $createResult.created}
+				<div class="alert alert-success">
+					<p>{tr}Contacts created and credits linked{/tr}:</p>
+					<ul>{foreach from=$createResult.created item=row}<li>{$row.name|escape} &rarr; <a href="{$row.view_url|escape}">{$row.title|escape}</a> ({$row.rows})</li>{/foreach}</ul>
+				</div>
+			{/if}
+			{if $createResult.linked}
+				<div class="alert alert-success">
+					<p>{tr}Linked to an existing contact{/tr}:</p>
+					<ul>{foreach from=$createResult.linked item=row}<li>{$row.name|escape} &rarr; <a href="{$row.view_url|escape}">{$row.title|escape}</a> ({$row.rows})</li>{/foreach}</ul>
+				</div>
+			{/if}
+			{if $createResult.errors}
+				<div class="alert alert-danger">
+					<p>{tr}Failed{/tr}:</p>
+					<ul>{foreach from=$createResult.errors item=row}<li>{$row.name|escape}: {$row.error|escape}</li>{/foreach}</ul>
+				</div>
+			{/if}
+		{/if}
+
 		<p>{$survey.films} {tr}films{/tr}, {$survey.credits} {tr}credits{/tr}, {$survey.people} {tr}distinct people{/tr}:
 			{$counts.linked} {tr}already linked to a contact{/tr}, {$counts.match} {tr}matching one contact by name{/tr},
 			{$counts.choose} {tr}matching several{/tr}, {$counts.unmatched} {tr}with no contact yet{/tr}.</p>
@@ -90,21 +111,93 @@
 			<p>{tr}Nothing left to link by name.{/tr}</p>
 		{/if}
 
-		{if $unmatched}
-			<h2>{tr}Most-credited people with no contact yet{/tr}</h2>
-			<p class="text-muted">{tr}Listed only so you can see what is left - creating contacts for them (through Wikidata and TMDb) is the next stage.{/tr}</p>
-			<table class="table table-condensed">
-				<thead><tr><th>{tr}Credited as{/tr}</th><th>{tr}Credits{/tr}</th><th>{tr}Films{/tr}</th></tr></thead>
-				<tbody>
-					{foreach from=$unmatched item=person}
-						<tr>
-							<td>{$person.name|escape}</td>
-							<td>{$person.credits} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
-							<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
-						</tr>
-					{/foreach}
-				</tbody>
-			</table>
+		{if $counts.unmatched}
+			<h2>{tr}People with no contact yet{/tr}</h2>
+			{if !$lookup}
+				<p>{tr}Most-credited first. Look up the next{/tr} {$lookupBatch} {tr}on TMDb and Wikidata (this contacts those services, so it takes a few seconds):{/tr}</p>
+				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+					<input type="hidden" name="start" value="{$start}" />
+					<input type="submit" class="btn btn-primary" name="fResolve" value="{tr}Look up next batch{/tr}" />
+				{/form}
+				<table class="table table-condensed">
+					<thead><tr><th>{tr}Credited as{/tr}</th><th>{tr}Credits{/tr}</th><th>{tr}Films{/tr}</th></tr></thead>
+					<tbody>
+						{foreach from=$unmatchedShown item=person}
+							<tr>
+								<td>{$person.name|escape}</td>
+								<td>{$person.credits} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
+								<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
+							</tr>
+						{/foreach}
+					</tbody>
+				</table>
+			{else}
+				{if !$lookup.tokenSet}
+					<div class="alert alert-warning">{tr}No TMDb access token is set (contactwiki admin settings) - nobody can be looked up.{/tr}</div>
+				{/if}
+				{if $lookup.wikidataError}
+					<div class="alert alert-warning">{tr}The Wikidata lookup failed - TMDb-only creation is still offered, but nobody is matched to a Wikidata item. Try again later.{/tr}{if $lookup.wikidataErrorReason}<br /><small>{tr}Reason{/tr}: {$lookup.wikidataErrorReason|escape}</small>{/if}</div>
+				{/if}
+				{if $lookup.people}
+					{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+						<input type="hidden" name="start" value="{$start}" />
+						{foreach from=$lookup.people item=person}<input type="hidden" name="batch[]" value="{$person.key|escape}" />{/foreach}
+						<p>{$lookup.people|@count} {tr}looked up{/tr}{if $lookup.remaining}, {$lookup.remaining} {tr}more after these{/tr}{/if}:&nbsp;
+							<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create / Link Selected{/tr}" />
+							<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?fResolve=1&amp;start={$start+$lookup.people|@count}">{tr}Skip these{/tr}</a></p>
+						<table class="table table-condensed">
+							<thead>
+								<tr>
+									<th></th>
+									<th>{tr}Credited as{/tr}</th>
+									<th>{tr}Credits{/tr}</th>
+									<th>{tr}Films{/tr}</th>
+									<th>{tr}Found{/tr}</th>
+								</tr>
+							</thead>
+							<tbody>
+								{foreach from=$lookup.people item=person}
+									<tr>
+										<td>
+											{if $person.status == 'create' || $person.status == 'create_tmdb' || $person.status == 'link_existing'}
+												<input type="checkbox" name="selected2[]" value="{$person.key|escape}" checked="checked" />
+												<input type="hidden" name="pick[{$person.key|escape}]" value="{$person.options[0].value|escape}" />
+											{elseif $person.status == 'choose'}
+												<input type="checkbox" name="selected2[]" value="{$person.key|escape}" />
+											{/if}
+										</td>
+										<td>{$person.name|escape}</td>
+										<td>{$person.credits} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
+										<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
+										<td>
+											{if $person.status == 'unresolved'}
+												<span class="text-muted">{tr}Not resolved{/tr}: {$person.reason|escape}</span>
+											{else}
+												{foreach from=$person.options item=o name=opts}
+													{if $person.status == 'choose'}<label><input type="radio" name="pick[{$person.key|escape}]" value="{$o.value|escape}" {if $smarty.foreach.opts.first}checked="checked"{/if} />{/if}
+													{if $person.status == 'choose'}<br />{/if}
+													{if $o.existing}
+														{tr}Link to existing contact{/tr}: <a href="{$o.existing.view_url|escape}">{$o.existing.title|escape}</a>
+													{elseif $o.qid != ''}
+														{tr}Create from Wikidata{/tr}: <a href="https://www.wikidata.org/wiki/{$o.qid|escape}" target="_blank" rel="noopener">{$o.label|escape} ({$o.qid|escape})</a>{if $o.from_tmdb} <span class="text-muted">({tr}Q-id from TMDb's external ids{/tr})</span>{/if}{if !$o.is_human} <span class="text-danger">({tr}not a human on Wikidata{/tr})</span>{/if}
+													{else}
+														{tr}Create from TMDb{/tr} <span class="text-muted">({tr}no Wikidata item{/tr}){if $o.details}: {$o.details.known_for|escape}{if $o.details.birthday}, {tr}born{/tr} {$o.details.birthday|escape}{/if}{/if}</span>
+													{/if}
+													<a class="small text-muted" href="https://www.themoviedb.org/person/{$o.tmdb_id}" target="_blank" rel="noopener">TMDb {$o.tmdb_id}</a>
+													{if $person.status == 'choose'}</label>{/if}
+												{/foreach}
+											{/if}
+										</td>
+									</tr>
+								{/foreach}
+							</tbody>
+						</table>
+						<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create / Link Selected{/tr}" />
+					{/form}
+				{else}
+					<p>{tr}Nobody left to look up.{/tr}</p>
+				{/if}
+			{/if}
 		{/if}
 
 	</div>

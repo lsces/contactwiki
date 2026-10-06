@@ -324,6 +324,217 @@ trait ContactWikiTrait {
 		return $index;
 	}
 
+	/**
+	 * GET one TMDb v3 API path with the configured Read Access Token. Null (reason in
+	 * getLastFetchError()) when no token is set or the call fails.
+	 */
+	protected static function tmdbGet( string $pPath ): ?array {
+		global $gBitSystem;
+		$token = $gBitSystem->getConfig( 'contactwiki_tmdb_token', '' );
+		if( $token === '' ) {
+			self::$lastFetchError = 'No TMDb access token is set (contactwiki admin settings)';
+			return null;
+		}
+		$context = stream_context_create( [ 'http' => [
+			'header'  => "Authorization: Bearer $token\r\nAccept: application/json\r\n",
+			'timeout' => 15,
+		] ] );
+		$json = self::fetchExternal( 'https://api.themoviedb.org/3'.$pPath, $context );
+		return $json === false ? null : ( json_decode( $json, true ) ?: [] );
+	}
+
+	/**
+	 * A TMDb movie's cast and crew as person ids by normalised name - what a credit's plain-text name
+	 * is matched against. Cached per request (several people share a film).
+	 *
+	 * @return array<string, array<int,string>>|null  normalised name => [ tmdb person id => TMDb's spelling ]
+	 */
+	public static function fetchTmdbMovieCredits( int $pMovieId ): ?array {
+		static $cache = [];
+		if( !array_key_exists( $pMovieId, $cache ) ) {
+			$data = self::tmdbGet( "/movie/$pMovieId/credits" );
+			if( $data === null ) {
+				return null;
+			}
+			$byName = [];
+			foreach( array_merge( $data['cast'] ?? [], $data['crew'] ?? [] ) as $person ) {
+				if( !empty( $person['id'] ) && !empty( $person['name'] ) ) {
+					$byName[self::normaliseName( $person['name'] )][(int)$person['id']] = $person['name'];
+				}
+			}
+			$cache[$pMovieId] = $byName;
+		}
+		return $cache[$pMovieId];
+	}
+
+	/**
+	 * Which TMDb person(s) a credited name is, from the credits of the films it appears in: the id(s)
+	 * TMDb gives that name on each film's cast/crew list, until two films have agreed (or six have been
+	 * looked at). One id = that person; more than one = two people of the same name, for a human to
+	 * choose between.
+	 *
+	 * @param string $pName
+	 * @param int[]  $pMovieIds  TMDb movie ids of the films credited
+	 * @return array{ids:int[], names:array<int,string>, error:?string}
+	 */
+	public static function findTmdbPersonForCredit( string $pName, array $pMovieIds ): array {
+		$key = self::normaliseName( $pName );
+		$ids = $names = $hits = [];
+		$looked = 0;
+		$error = null;
+		foreach( $pMovieIds as $movieId ) {
+			if( $looked++ >= 6 ) {
+				break;
+			}
+			$credits = self::fetchTmdbMovieCredits( (int)$movieId );
+			if( $credits === null ) {
+				$error = self::getLastFetchError();
+				continue;
+			}
+			foreach( $credits[$key] ?? [] as $id => $name ) {
+				$ids[$id] = $id;
+				$names[$id] = $name;
+				$hits[$movieId] = true;
+			}
+			if( count( $hits ) >= 2 ) {
+				break;
+			}
+		}
+		return [ 'ids' => array_values( $ids ), 'names' => $names, 'error' => $ids ? null : $error ];
+	}
+
+	/**
+	 * A TMDb person with their external ids (imdb, wikidata) - one call.
+	 *
+	 * @return array{id:int, name:string, birthday:?string, deathday:?string, place_of_birth:?string,
+	 *         biography:string, known_for:?string, profile_path:?string, imdb_id:?string, wikidata_id:?string}|null
+	 */
+	public static function fetchTmdbPerson( int $pTmdbId ): ?array {
+		$d = self::tmdbGet( "/person/$pTmdbId?language=en-US&append_to_response=external_ids" );
+		if( !$d || empty( $d['name'] ) ) {
+			return null;
+		}
+		return [
+			'id'             => (int)$d['id'],
+			'name'           => $d['name'],
+			'birthday'       => $d['birthday'] ?: null,
+			'deathday'       => $d['deathday'] ?: null,
+			'place_of_birth' => $d['place_of_birth'] ?: null,
+			'biography'      => trim( (string)( $d['biography'] ?? '' ) ),
+			'known_for'      => $d['known_for_department'] ?? null,
+			'profile_path'   => $d['profile_path'] ?: null,
+			'imdb_id'        => $d['external_ids']['imdb_id'] ?: null,
+			'wikidata_id'    => $d['external_ids']['wikidata_id'] ?: null,
+		];
+	}
+
+	/**
+	 * Wikidata items for a batch of TMDb person ids (P4985), one SPARQL query per 150 - the same
+	 * shape as lookupWikidataByMusicBrainzIds(). An id Wikidata doesn't know is absent; one claimed by
+	 * more than one item comes back with every candidate. Null if the query itself fails.
+	 *
+	 * @param list<int|string> $pTmdbIds
+	 * @return array<string, list<array{qid:string, label:string, is_human:bool}>>|null  keyed by TMDb id
+	 */
+	public static function lookupWikidataByTmdbPersonIds( array $pTmdbIds ): ?array {
+		$ret = [];
+		foreach( array_chunk( array_values( array_unique( array_map( 'strval', $pTmdbIds ) ) ), 150 ) as $chunk ) {
+			$values = implode( ' ', array_map( fn( $id ) => '"'.addslashes( $id ).'"', $chunk ) );
+			$query = 'SELECT ?tid ?item ?itemLabel ?human WHERE { VALUES ?tid { '.$values.' } ?item wdt:P4985 ?tid . '
+				.'BIND( EXISTS { ?item wdt:P31 wd:Q5 } AS ?human ) SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } }';
+			$context = stream_context_create( [ 'http' => [
+				'method'  => 'POST',
+				'header'  => self::userAgentHeader()."Accept: application/sparql-results+json\r\nContent-Type: application/x-www-form-urlencoded\r\n",
+				'content' => http_build_query( [ 'query' => $query ] ),
+				'timeout' => 30,
+			] ] );
+			$json = self::fetchExternal( 'https://query.wikidata.org/sparql', $context );
+			if( $json === false ) {
+				return null;
+			}
+			foreach( json_decode( $json, true )['results']['bindings'] ?? [] as $row ) {
+				if( preg_match( '#/(Q\d+)$#', $row['item']['value'] ?? '', $m ) ) {
+					$ret[(string)$row['tid']['value']][] = [
+						'qid'      => $m[1],
+						'label'    => $row['itemLabel']['value'] ?? $m[1],
+						'is_human' => ( $row['human']['value'] ?? '' ) === 'true',
+					];
+				}
+			}
+		}
+		return $ret;
+	}
+
+	public static function findContactByTmdbId( string $pTmdbId ): ?array {
+		return self::findWikiContactByXref( 'tmdb', trim( $pTmdbId ) );
+	}
+
+	/**
+	 * Create an individual from a TMDb person when Wikidata has no item for them - the film/TV
+	 * counterpart of createFromMusicBrainz(). Identity is the `tmdb` xref; a later Reload from Wikidata
+	 * upgrades it once an item appears (and the TMDb id on that item matches).
+	 *
+	 * @return array{content:object}|array{error:string}
+	 */
+	public static function createFromTmdb( int $pTmdbId ): array {
+		$person = self::fetchTmdbPerson( $pTmdbId );
+		if( !$person ) {
+			return [ 'error' => KernelTools::tra( 'Could not fetch that TMDb person.' ).' ('.$pTmdbId.')'.( self::getLastFetchError() ? ' - '.self::getLastFetchError() : '' ) ];
+		}
+		$gContent = new ContactWikiIndividual();
+		$parts = explode( ' ', $person['name'] );
+		$surname = array_pop( $parts ) ?: '';
+		$codes = [ 'Acting' => 'WP01', 'Directing' => 'WP02', 'Writing' => 'WP07' ];
+		$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1,
+			'contact_types' => isset( $codes[$person['known_for']] ) ? [ $codes[$person['known_for']] ] : [] ];
+		if( !$gContent->store( $storeHash ) ) {
+			return [ 'error' => implode( '; ', $gContent->mErrors ) ];
+		}
+		$gContent->applyTmdbData( $person );
+		return [ 'content' => $gContent ];
+	}
+
+	/**
+	 * The xrefs a TMDb person gives: its own id, IMDb id, life dates (this type's dob/dod), the
+	 * biography text and the profile photo. upsertXref(), so a repeat is an update.
+	 *
+	 * @return list<string>  human-readable lines of what was applied
+	 */
+	public function applyTmdbData( array $pPerson ): array {
+		$items = [];
+		$this->upsertXref( $this->mContentId, 'tmdb', [ 'xkey_ext' => (string)$pPerson['id'] ] );
+		$items[] = 'tmdb: '.$pPerson['id'];
+		if( !empty( $pPerson['imdb_id'] ) && isset( static::EXTERNAL_ID_PROPS['imdb'] ) ) {
+			$this->upsertXref( $this->mContentId, 'imdb', [ 'xkey_ext' => $pPerson['imdb_id'] ] );
+			$items[] = 'imdb: '.$pPerson['imdb_id'];
+		}
+		$dateItems = array_keys( $this->biographyDateProps() );
+		foreach( [ $dateItems[0] => $pPerson['birthday'] ?? null, $dateItems[1] => $pPerson['deathday'] ?? null ] as $item => $value ) {
+			if( !empty( $value ) ) {
+				$this->upsertXref( $this->mContentId, $item, [ 'xkey_ext' => $value ] );
+				$items[] = $item.': '.$value;
+			}
+		}
+		if( !empty( $pPerson['biography'] ) ) {
+			$bioHash = [ 'content_id' => $this->mContentId, 'edit' => self::plainTextToHtmlParagraphs( $pPerson['biography'] ) ];
+			\Bitweaver\Liberty\LibertyContent::store( $bioHash );
+			$items[] = KernelTools::tra( 'Biography' ).' (TMDb)';
+		}
+		if( !empty( $pPerson['profile_path'] ) ) {
+			$context = stream_context_create( [ 'http' => [ 'header' => self::userAgentHeader(), 'timeout' => 20 ] ] );
+			$image = self::fetchExternal( 'https://image.tmdb.org/t/p/w185'.$pPerson['profile_path'], $context );
+			if( $image !== false && $image !== '' ) {
+				$imagesDir = $this->getExtraImagePath( '' );
+				KernelTools::mkdir_p( $imagesDir );
+				if( file_put_contents( $imagesDir.'tmdb.jpg', $image ) !== false ) {
+					$this->upsertXref( $this->mContentId, 'image', [ 'xkey_ext' => 'tmdb.jpg' ] );
+					$items[] = KernelTools::tra( 'Image' ).' (TMDb)';
+				}
+			}
+		}
+		return $items;
+	}
+
 	public static function findContactByMusicBrainzId( string $pMbid ): ?array {
 		return self::findWikiContactByXref( 'musicbrainz', strtolower( $pMbid ) );
 	}

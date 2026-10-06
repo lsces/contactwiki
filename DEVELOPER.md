@@ -304,8 +304,35 @@ the name's candidates, never trusted. Link is an in-place update, which marks th
 (`view_film.tpl`) links a linked name to `index.php?content_id=`, which the dispatcher routes to the
 contact's own page.
 
-Not built yet: resolving the unmatched through Wikidata (the film's `tmdb` id -> TMDb credits ->
-person ids -> Wikidata P4985) and TMDb, and creating their contacts.
+**Stage 2 - "Look up next batch"** (opt-in: nothing touches the network until pressed). For the
+most-credited people still without a contact, 10 at a time:
+
+1. **TMDb person id** - the person's films' own `tmdb` ids (`FisheyeFilm::tmdbIdsByFilm()`), then each
+   film's TMDb credits (`fetchTmdbMovieCredits()`, cast + crew, cached per request); the credited name
+   (normalised) is looked up in them (`findTmdbPersonForCredit()`, up to 6 films, stops when two agree).
+   One id = that person; several = two people of that name, chosen by radio.
+2. **Wikidata Q-id** - P4985 (TMDb person id) via one SPARQL query for the batch
+   (`lookupWikidataByTmdbPersonIds()`); where Wikidata has none, TMDb's own external ids
+   (`fetchTmdbPerson()` `wikidata_id`) are the fallback.
+3. **Existing contact first** - one already holding the TMDb id or Q-id (`findContactByTmdbId()`,
+   `findContactByWikidataQid()`) is linked, never duplicated.
+4. **Create** - from the Wikidata item (`createFromWikidata()`, the full reload cascade: ids, dates,
+   biography, image), or from TMDb alone when Wikidata has no item (`createFromTmdb()`/`applyTmdbData()`:
+   name, `tmdb`/`imdb` ids, dob/dod, biography, profile photo, a WP01/WP02/WP07 tag from TMDb's
+   `known_for_department`). A TMDb-only contact's identity is its `tmdb` xref and its credit `xkey` is
+   empty until a Wikidata item appears. The contact always carries the TMDb id it was found by.
+5. **Link** the person's unlinked credit rows (`xref` = contact, `xkey` = Q-id).
+
+The form posts `pick[key]` = `<tmdb id>:<Q-id or empty>`; both are re-validated server side. Reviewed
+list, 10 per submit with a gap between creations; people unticked/unresolved are stepped past
+(`start`). "Not resolved" gives the reason (no TMDb token, no film with a TMDb id, TMDb lookup failed,
+or not found in the films' TMDb credits under that name).
+
+Known gaps: groups (an orchestra credited as a star) are only matched by name, not created; TV
+programs/episodes are not covered; a TMDb-only contact's *Reload from Wikidata* button has no TMDb
+reload path yet (it reports no Wikidata id); the Wikidata label shown in the review list can be the bare
+Q-id when the SPARQL label service returns none (the created contact's name comes from the entity, not
+that label).
 
 ### Artists pass - `load_wiki_artists.php`
 
@@ -353,9 +380,8 @@ exhaustive - add a Q-id when a real contact shows it's missing.
 
 ## Not yet built
 
-- Film/TV cast and crew: name-matching and linking to existing contacts is built (film people pass
-  above); resolving the rest through Wikidata/TMDb and creating contacts, and the same for TV
-  programs/episodes, are not.
+- Film/TV cast and crew: the film people pass (above) matches, resolves through TMDb/Wikidata, creates
+  and links; TV programs/episodes are not covered.
 - Group membership over time (see the open question above), and creating members' contacts from a
   group's Wikidata claims.
 - A home for place of birth/death and date of death beyond the `dod` xref (DOB is
