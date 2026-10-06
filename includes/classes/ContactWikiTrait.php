@@ -368,6 +368,46 @@ trait ContactWikiTrait {
 	}
 
 	/**
+	 * A TMDb TV series' whole cast and crew across every season (aggregate_credits) as person ids by
+	 * normalised name - one call for the show, however many seasons. Same shape as
+	 * fetchTmdbMovieCredits(). Cached per request.
+	 *
+	 * @return array<string, array<int,string>>|null  normalised name => [ tmdb person id => TMDb's spelling ]
+	 */
+	public static function fetchTmdbTvCredits( int $pTvId ): ?array {
+		static $cache = [];
+		if( !array_key_exists( $pTvId, $cache ) ) {
+			$data = self::tmdbGet( "/tv/$pTvId/aggregate_credits" );
+			if( $data === null ) {
+				return null;
+			}
+			$byName = [];
+			foreach( array_merge( $data['cast'] ?? [], $data['crew'] ?? [] ) as $person ) {
+				if( !empty( $person['id'] ) && !empty( $person['name'] ) ) {
+					$byName[self::normaliseName( $person['name'] )][(int)$person['id']] = $person['name'];
+				}
+			}
+			$cache[$pTvId] = $byName;
+		}
+		return $cache[$pTvId];
+	}
+
+	/**
+	 * Which TMDb person(s) a credited name is, from a TV series' aggregate credits. Same result shape
+	 * as findTmdbPersonForCredit().
+	 *
+	 * @return array{ids:int[], names:array<int,string>, error:?string}
+	 */
+	public static function findTmdbPersonForTvCredit( string $pName, int $pTvId ): array {
+		$credits = self::fetchTmdbTvCredits( $pTvId );
+		if( $credits === null ) {
+			return [ 'ids' => [], 'names' => [], 'error' => self::getLastFetchError() ];
+		}
+		$found = $credits[self::normaliseName( $pName )] ?? [];
+		return [ 'ids' => array_keys( $found ), 'names' => $found, 'error' => null ];
+	}
+
+	/**
 	 * Which TMDb person(s) a credited name is, from the credits of the films it appears in: the id(s)
 	 * TMDb gives that name on each film's cast/crew list, until two films have agreed (or six have been
 	 * looked at). One id = that person; more than one = two people of the same name, for a human to

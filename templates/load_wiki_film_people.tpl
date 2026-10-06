@@ -1,13 +1,31 @@
-{* People pass for Film credits - see load_wiki_film_people.php's own docblock. *}
+{* People pass for Film credits, or for one TV show (scope=tv) - see load_wiki_film_people.php's own docblock. *}
 {strip}
 <div class="floaticon">{bithelp}</div>
 
 <div class="admin liberty">
 	<div class="header">
-		<h1>{tr}Load Wiki Film People{/tr}</h1>
+		<h1>{if $scope == 'tv'}{tr}Load Wiki TV People{/tr}{if $program}: {$program.title|escape}{/if}{else}{tr}Load Wiki Film People{/tr}{/if}</h1>
 	</div>
 
 	<div class="body">
+
+		{if $scope == 'tv' && !$program}
+			<p>{tr}Pick a show. Each season's credits are built from its episodes (a season reload does it automatically, or press Build on the show's page), then its people are matched to contacts or created.{/tr}</p>
+			<table class="table table-condensed">
+				<thead><tr><th>{tr}Show{/tr}</th><th>{tr}Seasons{/tr}</th><th>{tr}Seasons with credits{/tr}</th><th>{tr}Credit rows{/tr}</th><th>{tr}Not linked yet{/tr}</th></tr></thead>
+				<tbody>
+					{foreach from=$programs item=prog}
+						<tr>
+							<td><a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv&amp;program_id={$prog.content_id}">{$prog.title|escape}</a></td>
+							<td>{$prog.seasons}</td>
+							<td>{$prog.built}</td>
+							<td>{$prog.credits}</td>
+							<td>{$prog.unlinked}</td>
+						</tr>
+					{/foreach}
+				</tbody>
+			</table>
+		{else}
 
 		{if $result}
 			{if $result.linked}
@@ -45,12 +63,27 @@
 			{/if}
 		{/if}
 
-		<p>{$survey.films} {tr}films{/tr}, {$survey.credits} {tr}credits{/tr}, {$survey.people} {tr}distinct people{/tr}:
+		{if $scope == 'tv'}
+			{if $buildResult}
+				<div class="alert alert-success">{$buildResult.seasons} {tr}seasons built{/tr}: {$buildResult.inserted} {tr}credit rows written{/tr}, {$buildResult.archived} {tr}archived{/tr}.</div>
+			{/if}
+			<p>{$program.seasons} {tr}seasons{/tr}, {$program.built} {tr}with credits built{/tr}.
+				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+					{foreach from=$hiddenFields key=k item=v}{if $k != 'min'}<input type="hidden" name="{$k}" value="{$v|escape}" />{/if}{/foreach}
+					<input type="submit" class="btn btn-default" name="fBuild" value="{tr}Build credit directories{/tr}" />
+					&nbsp; {tr}Look up people credited on at least{/tr} <input type="number" min="1" name="min" value="{$min}" style="width:5em" /> {tr}episodes{/tr}
+					<input type="submit" class="btn btn-default" value="{tr}Apply{/tr}" />
+					&nbsp; <a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv">{tr}Pick another show{/tr}</a>
+				{/form}</p>
+		{/if}
+
+		<p>{$survey.films} {if $scope == 'tv'}{tr}seasons and the show{/tr}{else}{tr}films{/tr}{/if}, {$survey.credits} {tr}credits{/tr}, {$survey.people} {tr}distinct people{/tr}:
 			{$counts.linked} {tr}already linked to a contact{/tr}, {$counts.match} {tr}matching one contact by name{/tr},
 			{$counts.choose} {tr}matching several{/tr}, {$counts.unmatched} {tr}with no contact yet{/tr}.</p>
 
 		{if $reviewList}
 			{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+				{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
 				<p>{tr}Next{/tr} {$reviewList|@count} {tr}of{/tr} {$reviewTotal}:&nbsp;
 					<input type="submit" class="btn btn-primary" name="fLink" value="{tr}Link Selected{/tr}" /></p>
 				<table class="table table-condensed">
@@ -59,7 +92,7 @@
 							<th><input type="checkbox" id="film-people-toggle-all" title="{tr}Tick or clear all{/tr}" /></th>
 							<th>{tr}Credited as{/tr}</th>
 							<th>{tr}Credits{/tr}</th>
-							<th>{tr}Films{/tr}</th>
+							<th>{if $scope == 'tv'}{tr}Seasons{/tr}{else}{tr}Films{/tr}{/if}</th>
 							<th>{tr}Contact{/tr}</th>
 						</tr>
 					</thead>
@@ -113,14 +146,16 @@
 
 		{if $counts.unmatched}
 			<h2>{tr}People with no contact yet{/tr}</h2>
+			{if $counts.belowMin}<p class="text-muted">{$counts.belowMin} {tr}more are credited on fewer than the minimum and are not listed - lower the minimum above to include them.{/tr}</p>{/if}
 			{if !$lookup}
 				<p>{tr}Most-credited first. Look up the next{/tr} {$lookupBatch} {tr}on TMDb and Wikidata (this contacts those services, so it takes a few seconds):{/tr}</p>
 				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+				{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
 					<input type="hidden" name="start" value="{$start}" />
 					<input type="submit" class="btn btn-primary" name="fResolve" value="{tr}Look up next batch{/tr}" />
 				{/form}
 				<table class="table table-condensed">
-					<thead><tr><th>{tr}Credited as{/tr}</th><th>{tr}Credits{/tr}</th><th>{tr}Films{/tr}</th></tr></thead>
+					<thead><tr><th>{tr}Credited as{/tr}</th><th>{tr}Credits{/tr}</th><th>{if $scope == 'tv'}{tr}Seasons{/tr}{else}{tr}Films{/tr}{/if}</th></tr></thead>
 					<tbody>
 						{foreach from=$unmatchedShown item=person}
 							<tr>
@@ -140,18 +175,19 @@
 				{/if}
 				{if $lookup.people}
 					{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+				{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
 						<input type="hidden" name="start" value="{$start}" />
 						{foreach from=$lookup.people item=person}<input type="hidden" name="batch[]" value="{$person.key|escape}" />{/foreach}
 						<p>{$lookup.people|@count} {tr}looked up{/tr}{if $lookup.remaining}, {$lookup.remaining} {tr}more after these{/tr}{/if}:&nbsp;
 							<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create / Link Selected{/tr}" />
-							<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?fResolve=1&amp;start={$start+$lookup.people|@count}">{tr}Skip these{/tr}</a></p>
+							<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?fResolve=1&amp;start={$start+$lookup.people|@count}{foreach from=$hiddenFields key=k item=v}&amp;{$k}={$v|escape:'url'}{/foreach}">{tr}Skip these{/tr}</a></p>
 						<table class="table table-condensed">
 							<thead>
 								<tr>
 									<th></th>
 									<th>{tr}Credited as{/tr}</th>
 									<th>{tr}Credits{/tr}</th>
-									<th>{tr}Films{/tr}</th>
+									<th>{if $scope == 'tv'}{tr}Seasons{/tr}{else}{tr}Films{/tr}{/if}</th>
 									<th>{tr}Found{/tr}</th>
 								</tr>
 							</thead>
@@ -198,6 +234,8 @@
 					<p>{tr}Nobody left to look up.{/tr}</p>
 				{/if}
 			{/if}
+		{/if}
+
 		{/if}
 
 	</div>

@@ -328,11 +328,23 @@ list, 10 per submit with a gap between creations; people unticked/unresolved are
 (`start`). "Not resolved" gives the reason (no TMDb token, no film with a TMDb id, TMDb lookup failed,
 or not found in the films' TMDb credits under that name).
 
-Known gaps: groups (an orchestra credited as a star) are only matched by name, not created; TV
-programs/episodes are not covered; a TMDb-only contact's *Reload from Wikidata* button has no TMDb
+Known gaps: groups (an orchestra credited as a star) are only matched by name, not created; a TMDb-only contact's *Reload from Wikidata* button has no TMDb
 reload path yet (it reports no Wikidata id); the Wikidata label shown in the review list can be the bare
 Q-id when the SPARQL label service returns none (the created contact's name comes from the entity, not
 that label).
+
+#### TV, one show at a time (`load_wiki_film_people.php?scope=tv&program_id=N`)
+
+The same page, show by show like the music loading. `scope=tv` first lists the shows (seasons, seasons with credits,
+credit rows, not yet linked). On a show page: **Build credit directories** runs `FisheyeSeason::deriveCreditDirectory()`
+for each season (no network, idempotent - a season reload does it too), then the survey covers the show's seasons and
+the program's own star rows (`FisheyeCredits::survey()`), stage 1 name-matches, and stage 2 asks TMDb for the show's
+**aggregate credits** (`fetchTmdbTvCredits()`, one call for the whole show via the program's `tmdb` TV id,
+`findTmdbPersonForTvCredit()`) instead of each film's. Everything after the TMDb person id is identical (Wikidata P4985,
+existing contact, create from Wikidata or TMDb, link). Linking sets `xref`/`xkey` on every season row and the program row
+for that name; a later season reload carries the link across. People credited on fewer than `min` episodes (default 2
+for TV) are left out of the lookup list and counted ("N more below the minimum"). Linked names are reused, so a person
+resolved on one show arrives already linked on the next.
 
 ### Artists pass - `load_wiki_artists.php`
 
@@ -380,8 +392,8 @@ exhaustive - add a Q-id when a real contact shows it's missing.
 
 ## Not yet built
 
-- Film/TV cast and crew: the film people pass (above) matches, resolves through TMDb/Wikidata, creates
-  and links; TV programs/episodes are not covered.
+- Film/TV cast and crew: the film people pass and its per-show TV scope (above) match, resolve through TMDb/Wikidata,
+  create and link.
 - Group membership over time (see the open question above), and creating members' contacts from a
   group's Wikidata claims.
 - A home for place of birth/death and date of death beyond the `dod` xref (DOB is

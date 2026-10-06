@@ -21,13 +21,21 @@
  *   - otherwise create from the Wikidata item, or from TMDb when Wikidata has none.
  * Nothing is created or linked until the reviewed list is submitted.
  *
+ * The same page serves one TV show at a time (scope=tv&program_id=N, "show by show" like the music
+ * loading): its seasons' credit directories (FisheyeSeason::deriveCreditDirectory(), built from the
+ * episodes - "Build credit directories") and the program's own cast rows are surveyed, matched and
+ * linked the same way; TMDb is asked for the show's aggregate credits (one call) instead of each
+ * film's. People credited on fewer than `min` episodes are left out of the lookup list.
+ *
  * @package contactwiki
  * @subpackage functions
  */
 
 namespace Bitweaver\Contactwiki;
 
+use Bitweaver\Fisheyemedia\FisheyeCredits;
 use Bitweaver\Fisheyemedia\FisheyeFilm;
+use Bitweaver\Fisheyemedia\FisheyeSeason;
 use Bitweaver\KernelTools;
 
 require_once '../kernel/includes/setup_inc.php';
@@ -45,6 +53,45 @@ const LOAD_WIKI_FILM_PEOPLE_BATCH = 100;
 const LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH = 10;
 const LOAD_WIKI_FILM_PEOPLE_GAP_US = 500000;
 
+$scope = ( $_REQUEST['scope'] ?? '' ) === 'tv' ? 'tv' : 'film';
+$programId = $scope === 'tv' ? (int)( $_REQUEST['program_id'] ?? 0 ) : 0;
+$minCredits = max( 1, (int)( $_REQUEST['min'] ?? ( $scope === 'tv' ? 2 : 1 ) ) );
+
+// TV with no show picked yet: the show picker, nothing else.
+if( $scope === 'tv' && !$programId ) {
+	$gBitSmarty->assign( 'scope', 'tv' );
+	$gBitSmarty->assign( 'programs', FisheyeCredits::programOverview() );
+	$gBitSystem->display( 'bitpackage:contactwiki/load_wiki_film_people.tpl', KernelTools::tra( 'Load Wiki TV People' ), [ 'display_mode' => 'edit' ] );
+	exit;
+}
+$program = null;
+$contentIds = null;
+if( $scope === 'tv' ) {
+	foreach( FisheyeCredits::programOverview() as $candidateProgram ) {
+		if( $candidateProgram['content_id'] === $programId ) {
+			$program = $candidateProgram;
+		}
+	}
+	if( !$program ) {
+		$gBitSystem->fatalError( KernelTools::tra( 'No such program.' ) );
+	}
+	$seasonIds = FisheyeCredits::seasonIdsForProgram( $programId );
+	$contentIds = array_merge( [ $programId ], $seasonIds );
+}
+
+/** The credits survey for this page's scope, shaped as people[].films = the film/season titles. */
+$surveyFn = function() use ( $scope, $contentIds ): array {
+	if( $scope === 'film' ) {
+		return FisheyeFilm::surveyCredits();
+	}
+	$survey = FisheyeCredits::survey( [ 'fisheyeseason', 'fisheyeprogram' ], $contentIds );
+	foreach( $survey['people'] as &$person ) {
+		$person['films'] = $person['items'];
+	}
+	unset( $person );
+	return [ 'films' => $survey['items'], 'credits' => $survey['credits'], 'people' => $survey['people'] ];
+};
+
 $nameIndex = ContactWikiIndividual::nameIndex();
 
 /** The contacts a credited name could be, from the name index. */
@@ -54,13 +101,34 @@ $candidatesFor = function( string $pName ) use ( $nameIndex ): array {
 
 $result = null;
 $createResult = null;
+$buildResult = null;
 $start = max( 0, (int)( $_REQUEST['start'] ?? 0 ) );
 $resolve = !empty( $_REQUEST['fResolve'] ) || !empty( $_REQUEST['fCreate'] );
+
+// ---- TV: build every season's credit directory from its episodes (no network, idempotent).
+if( $scope === 'tv' && !empty( $_REQUEST['fBuild'] ) ) {
+	$buildResult = [ 'seasons' => 0, 'inserted' => 0, 'archived' => 0 ];
+	foreach( $seasonIds as $seasonId ) {
+		$season = new FisheyeSeason( null, $seasonId );
+		$season->load();
+		foreach( $season->deriveCreditDirectory() as $roleCounts ) {
+			$buildResult['inserted'] += $roleCounts['inserted'];
+			$buildResult['archived'] += $roleCounts['archived'];
+		}
+		$buildResult['seasons']++;
+	}
+	// The picker's own counts are stale after a build.
+	foreach( FisheyeCredits::programOverview() as $candidateProgram ) {
+		if( $candidateProgram['content_id'] === $programId ) {
+			$program = $candidateProgram;
+		}
+	}
+}
 
 // ---- Stage 1 write: link by name.
 if( !empty( $_REQUEST['fLink'] ) ) {
 	$result = [ 'linked' => [], 'rows' => 0, 'remaining' => 0, 'skipped' => 0 ];
-	$survey = FisheyeFilm::surveyCredits();
+	$survey = $surveyFn();
 	$chosen = (array)( $_REQUEST['contact'] ?? [] );
 	$done = 0;
 	foreach( (array)( $_REQUEST['selected'] ?? [] ) as $key ) {
@@ -96,7 +164,7 @@ if( !empty( $_REQUEST['fLink'] ) ) {
 // ---- Stage 2 write: create (or find) the contact for each ticked person and link their credits.
 if( !empty( $_REQUEST['fCreate'] ) ) {
 	$createResult = [ 'created' => [], 'linked' => [], 'errors' => [], 'rows' => 0 ];
-	$survey = FisheyeFilm::surveyCredits();
+	$survey = $surveyFn();
 	$picks = (array)( $_REQUEST['pick'] ?? [] );
 	$attempted = 0;
 	foreach( array_slice( array_map( 'strval', (array)( $_REQUEST['selected2'] ?? [] ) ), 0, LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH ) as $key ) {
@@ -139,8 +207,8 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 }
 
 // ---- Survey after any write, so the page always shows what is left.
-$survey = FisheyeFilm::surveyCredits();
-$counts = [ 'linked' => 0, 'match' => 0, 'choose' => 0, 'unmatched' => 0 ];
+$survey = $surveyFn();
+$counts = [ 'linked' => 0, 'match' => 0, 'choose' => 0, 'unmatched' => 0, 'belowMin' => 0 ];
 $reviewList = [];
 $unmatchedAll = [];
 foreach( $survey['people'] as $key => $person ) {
@@ -165,7 +233,12 @@ foreach( $survey['people'] as $key => $person ) {
 		$reviewList[] = $person;
 	} else {
 		$counts['unmatched']++;
-		$unmatchedAll[] = $person;
+		// Only people credited often enough are looked up (TV: on at least `min` episodes).
+		if( ( $person['episodes'] ?: $person['credits'] ) >= $minCredits ) {
+			$unmatchedAll[] = $person;
+		} else {
+			$counts['belowMin']++;
+		}
 	}
 }
 
@@ -189,7 +262,8 @@ if( $resolve ) {
 	foreach( $batch as $person ) {
 		$filmIds = array_merge( $filmIds, array_keys( $person['films'] ) );
 	}
-	$tmdbByFilm = FisheyeFilm::tmdbIdsByFilm( $filmIds );
+	$tmdbByFilm = $scope === 'film' ? FisheyeFilm::tmdbIdsByFilm( $filmIds ) : [];
+	$tvId = $scope === 'tv' ? FisheyeCredits::tmdbIdFor( $programId ) : null;
 	$tokenSet = $gBitSystem->getConfig( 'contactwiki_tmdb_token', '' ) !== '';
 	$allIds = [];
 	foreach( $batch as &$person ) {
@@ -199,8 +273,13 @@ if( $resolve ) {
 				$movieIds[] = $tmdbByFilm[$filmId];
 			}
 		}
-		$person['tmdb_films'] = count( $movieIds );
-		$person['found'] = $movieIds && $tokenSet ? ContactWikiIndividual::findTmdbPersonForCredit( $person['name'], $movieIds ) : [ 'ids' => [], 'names' => [], 'error' => null ];
+		$person['tmdb_films'] = $scope === 'tv' ? (int)(bool)$tvId : count( $movieIds );
+		$noFound = [ 'ids' => [], 'names' => [], 'error' => null ];
+		if( $scope === 'tv' ) {
+			$person['found'] = $tvId && $tokenSet ? ContactWikiIndividual::findTmdbPersonForTvCredit( $person['name'], $tvId ) : $noFound;
+		} else {
+			$person['found'] = $movieIds && $tokenSet ? ContactWikiIndividual::findTmdbPersonForCredit( $person['name'], $movieIds ) : $noFound;
+		}
 		$allIds = array_merge( $allIds, $person['found']['ids'] );
 	}
 	unset( $person );
@@ -246,7 +325,7 @@ if( $resolve ) {
 		if( !$person['options'] ) {
 			$person['status'] = 'unresolved';
 			$person['reason'] = !$tokenSet ? KernelTools::tra( 'No TMDb access token is set.' )
-				: ( !$person['tmdb_films'] ? KernelTools::tra( 'None of its films carries a TMDb id.' )
+				: ( !$person['tmdb_films'] ? ( $scope === 'tv' ? KernelTools::tra( 'This show has no TMDb id.' ) : KernelTools::tra( 'None of its films carries a TMDb id.' ) )
 				: ( $person['found']['error'] ? KernelTools::tra( 'TMDb lookup failed' ).': '.$person['found']['error']
 				: KernelTools::tra( 'Not found in the TMDb credits of its films under this name.' ) ) );
 		} elseif( count( $person['options'] ) > 1 ) {
@@ -262,6 +341,11 @@ if( $resolve ) {
 		'tokenSet' => $tokenSet, 'remaining' => max( 0, count( $unmatchedAll ) - $start - count( $batch ) ) ];
 }
 
+$gBitSmarty->assign( 'scope', $scope );
+$gBitSmarty->assign( 'program', $program );
+$gBitSmarty->assign( 'min', $minCredits );
+$gBitSmarty->assign( 'buildResult', $buildResult );
+$gBitSmarty->assign( 'hiddenFields', array_filter( [ 'scope' => $scope === 'tv' ? 'tv' : null, 'program_id' => $programId ?: null, 'min' => $minCredits ] ) );
 $gBitSmarty->assign( 'survey', [ 'films' => $survey['films'], 'credits' => $survey['credits'], 'people' => count( $survey['people'] ) ] );
 $gBitSmarty->assign( 'counts', $counts );
 $gBitSmarty->assign( 'reviewList', array_slice( $reviewList, 0, LOAD_WIKI_FILM_PEOPLE_BATCH ) );
@@ -273,4 +357,5 @@ $gBitSmarty->assign( 'lookup', $lookup );
 $gBitSmarty->assign( 'result', $result );
 $gBitSmarty->assign( 'createResult', $createResult );
 
-$gBitSystem->display( 'bitpackage:contactwiki/load_wiki_film_people.tpl', KernelTools::tra( 'Load Wiki Film People' ), [ 'display_mode' => 'edit' ] );
+$pageTitle = $scope === 'tv' ? KernelTools::tra( 'Load Wiki TV People' ).': '.$program['title'] : KernelTools::tra( 'Load Wiki Film People' );
+$gBitSystem->display( 'bitpackage:contactwiki/load_wiki_film_people.tpl', $pageTitle, [ 'display_mode' => 'edit' ] );
