@@ -45,14 +45,14 @@
 		{if $createResult}
 			{if $createResult.created}
 				<div class="alert alert-success">
-					<p>{tr}Contacts created and credits linked{/tr}:</p>
-					<ul>{foreach from=$createResult.created item=row}<li>{$row.name|escape} &rarr; <a href="{$row.view_url|escape}">{$row.title|escape}</a> ({$row.rows})</li>{/foreach}</ul>
+					<p>{tr}Contacts created and credits linked{/tr} <span class="text-muted">({$createResult.seconds}s {tr}creating{/tr})</span>:</p>
+					<ul>{foreach from=$createResult.created item=row}<li>{$row.name|escape} &rarr; <a href="{$row.view_url|escape}">{$row.title|escape}</a> ({$row.rows}) <span class="text-muted">{$row.seconds}s</span></li>{/foreach}</ul>
 				</div>
 			{/if}
 			{if $createResult.linked}
 				<div class="alert alert-success">
 					<p>{tr}Linked to an existing contact{/tr}:</p>
-					<ul>{foreach from=$createResult.linked item=row}<li>{$row.name|escape} &rarr; <a href="{$row.view_url|escape}">{$row.title|escape}</a> ({$row.rows})</li>{/foreach}</ul>
+					<ul>{foreach from=$createResult.linked item=row}<li>{$row.name|escape} &rarr; <a href="{$row.view_url|escape}">{$row.title|escape}</a> ({$row.rows}) <span class="text-muted">{$row.seconds}s</span></li>{/foreach}</ul>
 				</div>
 			{/if}
 			{if $createResult.remaining}

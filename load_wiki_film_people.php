@@ -199,7 +199,7 @@ if( !empty( $_REQUEST['fLink'] ) ) {
 
 // ---- Stage 2 write: create (or find) the contact for each ticked person and link their credits.
 if( !empty( $_REQUEST['fCreate'] ) ) {
-	$createResult = [ 'created' => [], 'linked' => [], 'errors' => [], 'rows' => 0, 'remaining' => 0 ];
+	$createResult = [ 'created' => [], 'linked' => [], 'errors' => [], 'rows' => 0, 'remaining' => 0, 'seconds' => 0 ];
 	$createStarted = microtime( true );
 	$survey = $surveyFn();
 	$picks = (array)( $_REQUEST['pick'] ?? [] );
@@ -219,6 +219,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		if( $attempted++ ) {
 			usleep( LOAD_WIKI_FILM_PEOPLE_GAP_US );
 		}
+		$personStarted = microtime( true );
 		$contact = ContactWikiIndividual::findContactByTmdbId( (string)$tmdbId )
 			?: ( $qid !== '' ? ContactWikiIndividual::findContactByWikidataQid( $qid ) : null );
 		$wasCreated = false;
@@ -247,9 +248,14 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		$linkQid = $qid !== '' ? $qid : $gContent->getWikidataQid();
 		$rows = FisheyeFilm::linkCreditRows( $person['unlinked_ids'], (int)$gContent->mContentId, $linkQid );
 		$createResult['rows'] += $rows;
-		$entry = [ 'name' => $person['name'], 'title' => $gContent->getTitle(), 'rows' => $rows, 'view_url' => $gContent->getDisplayUrl() ];
+		$entry = [ 'name' => $person['name'], 'title' => $gContent->getTitle(), 'rows' => $rows, 'view_url' => $gContent->getDisplayUrl(),
+			'seconds' => round( microtime( true ) - $personStarted, 1 ) ];
 		$createResult[$wasCreated ? 'created' : 'linked'][] = $entry;
 	}
+}
+
+if( $createResult ) {
+	$createResult['seconds'] = round( microtime( true ) - $createStarted, 1 );
 }
 
 // ---- Survey after any write, so the page always shows what is left.
