@@ -52,6 +52,9 @@ const LOAD_WIKI_FILM_PEOPLE_BATCH = 100;
 // round trips, so a long list is done in small batches with a gap between creations, as the music pass does.
 const LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH = 10;
 const LOAD_WIKI_FILM_PEOPLE_GAP_US = 500000;
+// Wall-clock budget for one submit's creations. Production nginx cuts a request after 60s without a response, so a
+// run stops starting new people at this point and reports how many are left (they stay ticked for the next press).
+const LOAD_WIKI_FILM_PEOPLE_TIME_BUDGET = 35;
 
 $scope = ( $_REQUEST['scope'] ?? '' ) === 'tv' ? 'tv' : 'film';
 $programId = $scope === 'tv' ? (int)( $_REQUEST['program_id'] ?? 0 ) : 0;
@@ -194,7 +197,8 @@ if( !empty( $_REQUEST['fLink'] ) ) {
 
 // ---- Stage 2 write: create (or find) the contact for each ticked person and link their credits.
 if( !empty( $_REQUEST['fCreate'] ) ) {
-	$createResult = [ 'created' => [], 'linked' => [], 'errors' => [], 'rows' => 0 ];
+	$createResult = [ 'created' => [], 'linked' => [], 'errors' => [], 'rows' => 0, 'remaining' => 0 ];
+	$createStarted = microtime( true );
 	$survey = $surveyFn();
 	$picks = (array)( $_REQUEST['pick'] ?? [] );
 	$attempted = 0;
@@ -206,6 +210,10 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		}
 		$tmdbId = (int)$m[1];
 		$qid = $m[2] ?? '';
+		if( $attempted && microtime( true ) - $createStarted > LOAD_WIKI_FILM_PEOPLE_TIME_BUDGET ) {
+			$createResult['remaining']++;
+			continue;
+		}
 		if( $attempted++ ) {
 			usleep( LOAD_WIKI_FILM_PEOPLE_GAP_US );
 		}

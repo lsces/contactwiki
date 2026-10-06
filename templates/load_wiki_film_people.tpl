@@ -55,6 +55,9 @@
 					<ul>{foreach from=$createResult.linked item=row}<li>{$row.name|escape} &rarr; <a href="{$row.view_url|escape}">{$row.title|escape}</a> ({$row.rows})</li>{/foreach}</ul>
 				</div>
 			{/if}
+			{if $createResult.remaining}
+				<div class="alert alert-info">{$createResult.remaining} {tr}more ticked people were not done this time (time limit) - they are still listed and ticked below, press Create / Link Selected again to continue.{/tr}</div>
+			{/if}
 			{if $createResult.errors}
 				<div class="alert alert-danger">
 					<p>{tr}Failed{/tr}:</p>
