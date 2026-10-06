@@ -344,10 +344,58 @@ trait ContactWikiTrait {
 	}
 
 	/**
+	 * TMDb credits (cast + crew, movie or aggregate TV) as person ids by normalised name, each with the
+	 * credit roles this system uses it for: 'star' (cast), 'director' (crew job Director), 'writer' (crew
+	 * department Writing). Lets a credited name be matched to the TMDb person who did that job - an actor
+	 * and a director of the same name are different people.
+	 *
+	 * @return array<string, array<int, array{name:string, roles:string[]}>>
+	 */
+	private static function tmdbCreditsByName( array $pData ): array {
+		$byName = [];
+		$add = function( array $pPerson, array $pRoles ) use ( &$byName ) {
+			if( empty( $pPerson['id'] ) || empty( $pPerson['name'] ) ) {
+				return;
+			}
+			$entry = &$byName[self::normaliseName( $pPerson['name'] )][(int)$pPerson['id']];
+			$entry ??= [ 'name' => $pPerson['name'], 'roles' => [] ];
+			$entry['roles'] = array_values( array_unique( array_merge( $entry['roles'], $pRoles ) ) );
+		};
+		foreach( $pData['cast'] ?? [] as $person ) {
+			$add( $person, [ 'star' ] );
+		}
+		foreach( $pData['crew'] ?? [] as $person ) {
+			$jobs = isset( $person['jobs'] ) ? array_column( $person['jobs'], 'job' ) : array_filter( [ $person['job'] ?? null ] );
+			$roles = [];
+			if( in_array( 'Director', $jobs, true ) ) {
+				$roles[] = 'director';
+			}
+			if( ( $person['department'] ?? '' ) === 'Writing' ) {
+				$roles[] = 'writer';
+			}
+			$add( $person, $roles );
+		}
+		return $byName;
+	}
+
+	/**
+	 * The candidates for a credited name that did one of the given jobs - all of them when none did
+	 * (a credit TMDb files under another department, e.g. a creator).
+	 *
+	 * @param array<int, array{name:string, roles:string[]}> $pCandidates
+	 * @param string[] $pRoles  credit roles of the person (director/writer/star)
+	 * @return array<int, array{name:string, roles:string[]}>
+	 */
+	private static function filterByRole( array $pCandidates, array $pRoles ): array {
+		$matching = array_filter( $pCandidates, fn( $c ) => array_intersect( $c['roles'], $pRoles ) );
+		return $matching ?: $pCandidates;
+	}
+
+	/**
 	 * A TMDb movie's cast and crew as person ids by normalised name - what a credit's plain-text name
 	 * is matched against. Cached per request (several people share a film).
 	 *
-	 * @return array<string, array<int,string>>|null  normalised name => [ tmdb person id => TMDb's spelling ]
+	 * @return array<string, array<int, array{name:string, roles:string[]}>>|null  normalised name => [ tmdb person id => ... ]
 	 */
 	public static function fetchTmdbMovieCredits( int $pMovieId ): ?array {
 		static $cache = [];
@@ -356,13 +404,7 @@ trait ContactWikiTrait {
 			if( $data === null ) {
 				return null;
 			}
-			$byName = [];
-			foreach( array_merge( $data['cast'] ?? [], $data['crew'] ?? [] ) as $person ) {
-				if( !empty( $person['id'] ) && !empty( $person['name'] ) ) {
-					$byName[self::normaliseName( $person['name'] )][(int)$person['id']] = $person['name'];
-				}
-			}
-			$cache[$pMovieId] = $byName;
+			$cache[$pMovieId] = self::tmdbCreditsByName( $data );
 		}
 		return $cache[$pMovieId];
 	}
@@ -372,7 +414,7 @@ trait ContactWikiTrait {
 	 * normalised name - one call for the show, however many seasons. Same shape as
 	 * fetchTmdbMovieCredits(). Cached per request.
 	 *
-	 * @return array<string, array<int,string>>|null  normalised name => [ tmdb person id => TMDb's spelling ]
+	 * @return array<string, array<int, array{name:string, roles:string[]}>>|null  normalised name => [ tmdb person id => ... ]
 	 */
 	public static function fetchTmdbTvCredits( int $pTvId ): ?array {
 		static $cache = [];
@@ -381,30 +423,27 @@ trait ContactWikiTrait {
 			if( $data === null ) {
 				return null;
 			}
-			$byName = [];
-			foreach( array_merge( $data['cast'] ?? [], $data['crew'] ?? [] ) as $person ) {
-				if( !empty( $person['id'] ) && !empty( $person['name'] ) ) {
-					$byName[self::normaliseName( $person['name'] )][(int)$person['id']] = $person['name'];
-				}
-			}
-			$cache[$pTvId] = $byName;
+			$cache[$pTvId] = self::tmdbCreditsByName( $data );
 		}
 		return $cache[$pTvId];
 	}
 
 	/**
-	 * Which TMDb person(s) a credited name is, from a TV series' aggregate credits. Same result shape
-	 * as findTmdbPersonForCredit().
+	 * Which TMDb person(s) a credited name is, from a TV series' aggregate credits, limited to those who did
+	 * one of the person's credit roles. Same result shape as findTmdbPersonForCredit().
 	 *
 	 * @return array{ids:int[], names:array<int,string>, error:?string}
 	 */
-	public static function findTmdbPersonForTvCredit( string $pName, int $pTvId ): array {
+	public static function findTmdbPersonForTvCredit( string $pName, int $pTvId, array $pRoles = [] ): array {
 		$credits = self::fetchTmdbTvCredits( $pTvId );
 		if( $credits === null ) {
 			return [ 'ids' => [], 'names' => [], 'error' => self::getLastFetchError() ];
 		}
 		$found = $credits[self::normaliseName( $pName )] ?? [];
-		return [ 'ids' => array_keys( $found ), 'names' => $found, 'error' => null ];
+		if( $pRoles ) {
+			$found = self::filterByRole( $found, $pRoles );
+		}
+		return [ 'ids' => array_keys( $found ), 'names' => array_map( fn( $c ) => $c['name'], $found ), 'error' => null ];
 	}
 
 	/**
@@ -417,7 +456,7 @@ trait ContactWikiTrait {
 	 * @param int[]  $pMovieIds  TMDb movie ids of the films credited
 	 * @return array{ids:int[], names:array<int,string>, error:?string}
 	 */
-	public static function findTmdbPersonForCredit( string $pName, array $pMovieIds ): array {
+	public static function findTmdbPersonForCredit( string $pName, array $pMovieIds, array $pRoles = [] ): array {
 		$key = self::normaliseName( $pName );
 		$ids = $names = $hits = [];
 		$looked = 0;
@@ -431,9 +470,10 @@ trait ContactWikiTrait {
 				$error = self::getLastFetchError();
 				continue;
 			}
-			foreach( $credits[$key] ?? [] as $id => $name ) {
+			$candidates = $credits[$key] ?? [];
+			foreach( ( $pRoles ? self::filterByRole( $candidates, $pRoles ) : $candidates ) as $id => $candidate ) {
 				$ids[$id] = $id;
-				$names[$id] = $name;
+				$names[$id] = $candidate['name'];
 				$hits[$movieId] = true;
 			}
 			if( count( $hits ) >= 2 ) {
@@ -506,7 +546,61 @@ trait ContactWikiTrait {
 	}
 
 	public static function findContactByTmdbId( string $pTmdbId ): ?array {
-		return self::findWikiContactByXref( 'tmdb', trim( $pTmdbId ) );
+		global $gBitDb;
+		$pTmdbId = trim( $pTmdbId );
+		if( $found = self::findWikiContactByXref( 'tmdb', $pTmdbId ) ) {
+			return $found;
+		}
+		// An alias: TMDb often holds several records for one person; the extra ids are kept on the contact's
+		// own tmdb xref ({"also":["123"]}).
+		if( !ctype_digit( $pTmdbId ) ) {
+			return null;
+		}
+		$row = $gBitDb->getRow(
+			"SELECT lc.content_id, lc.title, lc.content_type_guid FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.content_id = x.content_id
+			 WHERE x.item = 'tmdb' AND x.end_date IS NULL AND x.data LIKE ?
+			 AND lc.content_type_guid IN ( 'contactwikiindi', 'contactwikigroup' )",
+			[ '%"'.$pTmdbId.'"%' ]
+		);
+		return $row ? [ 'content_id' => (int)$row['content_id'], 'title' => $row['title'], 'content_type_guid' => $row['content_type_guid'] ] : null;
+	}
+
+	/**
+	 * Record further TMDb person ids that are the same person as this contact's own `tmdb` id (TMDb keeps
+	 * duplicate records: the same writer under two ids). Kept on the tmdb xref's data as {"also":["id",...]}
+	 * and found by findContactByTmdbId(). Existing ids are not repeated.
+	 *
+	 * @param int[]|string[] $pIds
+	 * @return int  ids added
+	 */
+	public function addTmdbAliases( array $pIds ): int {
+		global $gBitDb;
+		$row = $gBitDb->getRow(
+			"SELECT `xref_id`, `xkey_ext`, `data` FROM `".BIT_DB_PREFIX."liberty_xref`
+			 WHERE `content_id` = ? AND `item` = 'tmdb' AND `end_date` IS NULL",
+			[ $this->mContentId ]
+		);
+		if( !$row ) {
+			return 0;
+		}
+		$data = !empty( $row['data'] ) ? ( json_decode( $row['data'], true ) ?: [] ) : [];
+		$also = array_map( 'strval', $data['also'] ?? [] );
+		$added = 0;
+		foreach( $pIds as $id ) {
+			$id = (string)(int)$id;
+			if( $id !== '0' && $id !== (string)$row['xkey_ext'] && !in_array( $id, $also, true ) ) {
+				$also[] = $id;
+				$added++;
+			}
+		}
+		if( $added ) {
+			$data['also'] = $also;
+			$hash = [ 'xref_id' => (int)$row['xref_id'], 'content_id' => $this->mContentId, 'item' => 'tmdb',
+				'xkey_ext' => $row['xkey_ext'], 'edit' => json_encode( $data ) ];
+			$this->storeXref( $hash );
+		}
+		return $added;
 	}
 
 	/**

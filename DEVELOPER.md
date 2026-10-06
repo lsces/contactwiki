@@ -341,7 +341,13 @@ for each season (no network, idempotent - a season reload does it too), then the
 the program's own star rows (`FisheyeCredits::survey()`), stage 1 name-matches, and stage 2 asks TMDb for the show's
 **aggregate credits** (`fetchTmdbTvCredits()`, one call for the whole show via the program's `tmdb` TV id,
 `findTmdbPersonForTvCredit()`) instead of each film's. Everything after the TMDb person id is identical (Wikidata P4985,
-existing contact, create from Wikidata or TMDb, link). Linking sets `xref`/`xkey` on every season row and the program row
+existing contact, create from Wikidata or TMDb, link). TMDb candidates are first **filtered by the credit's role** (`star` = a cast entry, `director` = crew job Director,
+`writer` = crew department Writing - an actor and a director of one name are different people). TMDb often holds several
+records for one person (the same writer under two ids): within one show, the same name doing the same job is **one
+person** - the record with a Wikidata item (else the lowest id) is used, the others are kept as **aliases** on the
+contact's `tmdb` xref (`data` = `{"also":["123"]}`, `addTmdbAliases()`, found again by `findContactByTmdbId()`); two
+different Wikidata items stay a choice. People left unticked stay at the top of the list until decided or skipped; only
+people with nothing to act on (not found on TMDb) are stepped past. Linking sets `xref`/`xkey` on every season row and the program row
 for that name; a later season reload carries the link across. People credited on fewer than `min` episodes (default 2
 for TV) are left out of the lookup list and counted ("N more below the minimum"). Linked names are reused, so a person
 resolved on one show arrives already linked on the next.

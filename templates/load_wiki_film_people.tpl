@@ -195,9 +195,11 @@
 								{foreach from=$lookup.people item=person}
 									<tr>
 										<td>
+											{if $person.status == 'unresolved'}<input type="hidden" name="unres[]" value="{$person.key|escape}" />{/if}
 											{if $person.status == 'create' || $person.status == 'create_tmdb' || $person.status == 'link_existing'}
 												<input type="checkbox" name="selected2[]" value="{$person.key|escape}" checked="checked" />
 												<input type="hidden" name="pick[{$person.key|escape}]" value="{$person.options[0].value|escape}" />
+												{if $person.options[0].aliases}<input type="hidden" name="also[{$person.key|escape}]" value="{$person.options[0].aliases|@implode:','}" />{/if}
 											{elseif $person.status == 'choose'}
 												<input type="checkbox" name="selected2[]" value="{$person.key|escape}" />
 											{/if}
@@ -220,6 +222,7 @@
 														{tr}Create from TMDb{/tr} <span class="text-muted">({tr}no Wikidata item{/tr}){if $o.details}: {$o.details.known_for|escape}{if $o.details.birthday}, {tr}born{/tr} {$o.details.birthday|escape}{/if}{/if}</span>
 													{/if}
 													<a class="small text-muted" href="https://www.themoviedb.org/person/{$o.tmdb_id}" target="_blank" rel="noopener">TMDb {$o.tmdb_id}</a>
+													{if $o.aliases}<span class="small text-muted">({tr}same person, also{/tr} {foreach from=$o.aliases item=a name=al}<a href="https://www.themoviedb.org/person/{$a}" target="_blank" rel="noopener">TMDb {$a}</a>{if !$smarty.foreach.al.last}, {/if}{/foreach})</span>{/if}
 													{if $person.status == 'choose'}</label>{/if}
 												{/foreach}
 											{/if}

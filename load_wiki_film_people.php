@@ -198,6 +198,11 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		if( !ContactWikiIndividual::findContactByTmdbId( (string)$tmdbId ) ) {
 			$gContent->upsertXref( $gContent->mContentId, 'tmdb', [ 'xkey_ext' => (string)$tmdbId ] );
 		}
+		// Further TMDb records of the same person (kept as aliases on the contact's tmdb id).
+		$also = array_filter( array_map( 'intval', explode( ',', (string)( $_REQUEST['also'][$key] ?? '' ) ) ) );
+		if( $also ) {
+			$gContent->addTmdbAliases( $also );
+		}
 		$linkQid = $qid !== '' ? $qid : $gContent->getWikidataQid();
 		$rows = FisheyeFilm::linkCreditRows( $person['unlinked_ids'], (int)$gContent->mContentId, $linkQid );
 		$createResult['rows'] += $rows;
@@ -242,11 +247,12 @@ foreach( $survey['people'] as $key => $person ) {
 	}
 }
 
-// After a Create, the people of the previous batch who are still unlinked (unticked, unresolved,
-// failed) stay in the list - step past them so the next batch is new people.
+// After a Create, people left unticked stay at the top of the list until decided (or skipped with "Skip
+// these"). Only people with nothing to act on (not found on TMDb) are stepped past, or they would block
+// the list for ever.
 if( !empty( $_REQUEST['fCreate'] ) ) {
 	$stillThere = 0;
-	foreach( (array)( $_REQUEST['batch'] ?? [] ) as $key ) {
+	foreach( (array)( $_REQUEST['unres'] ?? [] ) as $key ) {
 		if( !empty( $survey['people'][(string)$key]['unlinked_ids'] ) ) {
 			$stillThere++;
 		}
@@ -276,9 +282,9 @@ if( $resolve ) {
 		$person['tmdb_films'] = $scope === 'tv' ? (int)(bool)$tvId : count( $movieIds );
 		$noFound = [ 'ids' => [], 'names' => [], 'error' => null ];
 		if( $scope === 'tv' ) {
-			$person['found'] = $tvId && $tokenSet ? ContactWikiIndividual::findTmdbPersonForTvCredit( $person['name'], $tvId ) : $noFound;
+			$person['found'] = $tvId && $tokenSet ? ContactWikiIndividual::findTmdbPersonForTvCredit( $person['name'], $tvId, array_keys( $person['roles'] ) ) : $noFound;
 		} else {
-			$person['found'] = $movieIds && $tokenSet ? ContactWikiIndividual::findTmdbPersonForCredit( $person['name'], $movieIds ) : $noFound;
+			$person['found'] = $movieIds && $tokenSet ? ContactWikiIndividual::findTmdbPersonForCredit( $person['name'], $movieIds, array_keys( $person['roles'] ) ) : $noFound;
 		}
 		$allIds = array_merge( $allIds, $person['found']['ids'] );
 	}
@@ -320,6 +326,21 @@ if( $resolve ) {
 					'existing' => $existing,
 					'value'    => $tmdbId.':'.( $wd['qid'] ?? '' ),
 				];
+			}
+		}
+		// TMDb often holds several records for one person (R. D. Wingfield: two "Writing" ids). Within one
+		// show, the same name doing the same job more than once is the same person: take the record that
+		// has a Wikidata item (or the lowest id) and keep the others as aliases on the contact. Two
+		// different Wikidata items stay a choice.
+		if( $scope === 'tv' && count( $person['options'] ) > 1 ) {
+			$withQid = array_values( array_filter( $person['options'], fn( $o ) => $o['qid'] !== '' ) );
+			if( count( array_unique( array_column( $withQid, 'qid' ) ) ) <= 1 ) {
+				$allOptions = $person['options'];
+				usort( $allOptions, fn( $a, $b ) => $a['tmdb_id'] <=> $b['tmdb_id'] );
+				$primary = $withQid[0] ?? $allOptions[0];
+				$primary['aliases'] = array_values( array_unique( array_diff( array_column( $allOptions, 'tmdb_id' ), [ $primary['tmdb_id'] ] ) ) );
+				$primary['existing'] = $primary['existing'] ?: ( array_values( array_filter( array_column( $allOptions, 'existing' ) ) )[0] ?? null );
+				$person['options'] = [ $primary ];
 			}
 		}
 		if( !$person['options'] ) {
