@@ -105,7 +105,7 @@
 						<tr>
 							<th><input type="checkbox" id="film-people-toggle-all" title="{tr}Tick or clear all{/tr}" /></th>
 							<th>{tr}Credited as{/tr}</th>
-							<th>{tr}Credits{/tr}</th>
+							<th>{if $scope == 'tv'}{tr}Episodes{/tr}{else}{tr}Credits{/tr}{/if}</th>
 							<th>{if $scope == 'tv'}{tr}Seasons{/tr}{else}{tr}Films{/tr}{/if}</th>
 							<th>{tr}Contact{/tr}</th>
 						</tr>
@@ -122,7 +122,7 @@
 									{/if}
 								</td>
 								<td>{$person.name|escape}</td>
-								<td>{$person.credits} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
+								<td>{if $scope == 'tv' && $person.episodes}{$person.episodes} {tr}episodes{/tr}{else}{$person.credits}{/if} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
 								<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
 								<td>
 									{if $person.candidates|@count == 1}
@@ -169,12 +169,12 @@
 					<input type="submit" class="btn btn-primary" name="fResolve" value="{tr}Look up next batch{/tr}" />
 				{/form}
 				<table class="table table-condensed">
-					<thead><tr><th>{tr}Credited as{/tr}</th><th>{tr}Credits{/tr}</th><th>{if $scope == 'tv'}{tr}Seasons{/tr}{else}{tr}Films{/tr}{/if}</th></tr></thead>
+					<thead><tr><th>{tr}Credited as{/tr}</th><th>{if $scope == 'tv'}{tr}Episodes{/tr}{else}{tr}Credits{/tr}{/if}</th><th>{if $scope == 'tv'}{tr}Seasons{/tr}{else}{tr}Films{/tr}{/if}</th></tr></thead>
 					<tbody>
 						{foreach from=$unmatchedShown item=person}
 							<tr>
 								<td>{$person.name|escape}</td>
-								<td>{$person.credits} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
+								<td>{if $scope == 'tv' && $person.episodes}{$person.episodes} {tr}episodes{/tr}{else}{$person.credits}{/if} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
 								<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
 							</tr>
 						{/foreach}
@@ -200,7 +200,7 @@
 								<tr>
 									<th></th>
 									<th>{tr}Credited as{/tr}</th>
-									<th>{tr}Credits{/tr}</th>
+									<th>{if $scope == 'tv'}{tr}Episodes{/tr}{else}{tr}Credits{/tr}{/if}</th>
 									<th>{if $scope == 'tv'}{tr}Seasons{/tr}{else}{tr}Films{/tr}{/if}</th>
 									<th>{tr}Found{/tr}</th>
 								</tr>
@@ -219,7 +219,7 @@
 											{/if}
 										</td>
 										<td>{$person.name|escape}</td>
-										<td>{$person.credits} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
+										<td>{if $scope == 'tv' && $person.episodes}{$person.episodes} {tr}episodes{/tr}{else}{$person.credits}{/if} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
 										<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
 										<td>
 											{if $person.status == 'unresolved'}
