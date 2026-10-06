@@ -40,7 +40,7 @@ use Bitweaver\KernelTools;
 
 require_once '../kernel/includes/setup_inc.php';
 
-global $gBitSystem, $gBitSmarty;
+global $gBitSystem, $gBitSmarty, $gBitDb;
 
 $gBitSystem->verifyPackage( 'contactwiki' );
 $gBitSystem->verifyPackage( 'fisheyemedia' );
@@ -102,6 +102,7 @@ $candidatesFor = function( string $pName ) use ( $nameIndex ): array {
 $result = null;
 $createResult = null;
 $buildResult = null;
+$reloadResult = null;
 $start = max( 0, (int)( $_REQUEST['start'] ?? 0 ) );
 $resolve = !empty( $_REQUEST['fResolve'] ) || !empty( $_REQUEST['fCreate'] );
 
@@ -118,6 +119,36 @@ if( $scope === 'tv' && !empty( $_REQUEST['fBuild'] ) ) {
 		$buildResult['seasons']++;
 	}
 	// The picker's own counts are stale after a build.
+	foreach( FisheyeCredits::programOverview() as $candidateProgram ) {
+		if( $candidateProgram['content_id'] === $programId ) {
+			$program = $candidateProgram;
+		}
+	}
+}
+
+// ---- TV: reload the seasons' episodes from Plex (full cast per episode), which rebuilds each credit directory.
+// Each season is dozens of Plex calls and thumbnail fetches, so a few seasons per submit with a Continue.
+if( $scope === 'tv' && !empty( $_REQUEST['fReload'] ) ) {
+	$reloadResult = [ 'seasons' => [], 'episodes' => 0, 'next' => null, 'total' => count( $seasonIds ) ];
+	$reloadStarted = microtime( true );
+	for( $i = max( 0, (int)( $_REQUEST['rl'] ?? 0 ) ); $i < count( $seasonIds ); $i++ ) {
+		if( $reloadResult['episodes'] >= 30 || microtime( true ) - $reloadStarted > 25 ) {
+			$reloadResult['next'] = $i;
+			break;
+		}
+		$season = new FisheyeSeason( null, $seasonIds[$i] );
+		$season->load();
+		$reloaded = $season->reloadPlexEpisodes();
+		// Episode titles are only searchable through the season's own index words - same refresh
+		// edit_season.php's Reload Episodes does.
+		if( $gBitSystem->isPackageActive( 'search' ) ) {
+			require_once SEARCH_PKG_INCLUDE_PATH.'refresh_functions.php';
+			\Bitweaver\Liberty\refresh_index( $season );
+		}
+		$episodeCount = (int)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'episode' AND `end_date` IS NULL", [ $seasonIds[$i] ] );
+		$reloadResult['seasons'][] = [ 'title' => $season->getTitle(), 'matched' => !empty( $reloaded['matched'] ), 'episodes' => $episodeCount ];
+		$reloadResult['episodes'] += $episodeCount;
+	}
 	foreach( FisheyeCredits::programOverview() as $candidateProgram ) {
 		if( $candidateProgram['content_id'] === $programId ) {
 			$program = $candidateProgram;
@@ -366,6 +397,7 @@ $gBitSmarty->assign( 'scope', $scope );
 $gBitSmarty->assign( 'program', $program );
 $gBitSmarty->assign( 'min', $minCredits );
 $gBitSmarty->assign( 'buildResult', $buildResult );
+$gBitSmarty->assign( 'reloadResult', $reloadResult );
 $gBitSmarty->assign( 'hiddenFields', array_filter( [ 'scope' => $scope === 'tv' ? 'tv' : null, 'program_id' => $programId ?: null, 'min' => $minCredits ] ) );
 $gBitSmarty->assign( 'survey', [ 'films' => $survey['films'], 'credits' => $survey['credits'], 'people' => count( $survey['people'] ) ] );
 $gBitSmarty->assign( 'counts', $counts );

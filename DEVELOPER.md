@@ -337,7 +337,10 @@ that label).
 
 The same page, show by show like the music loading. `scope=tv` first lists the shows (seasons, seasons with credits,
 credit rows, not yet linked). On a show page: **Build credit directories** runs `FisheyeSeason::deriveCreditDirectory()`
-for each season (no network, idempotent - a season reload does it too), then the survey covers the show's seasons and
+for each season (no network, idempotent, re-reads the episode JSON already stored - it does **not** contact Plex; a season reload
+does it too). **Reload seasons from Plex (full cast)** runs `reloadPlexEpisodes()` per season (the way to get past the old
+5-star cap in stored episode JSON), a few seasons per submit with a Continue (about 30 episodes / 25 seconds), then the
+directory is rebuilt by the reload itself, then the survey covers the show's seasons and
 the program's own star rows (`FisheyeCredits::survey()`), stage 1 name-matches, and stage 2 asks TMDb for the show's
 **aggregate credits** (`fetchTmdbTvCredits()`, one call for the whole show via the program's `tmdb` TV id,
 `findTmdbPersonForTvCredit()`) instead of each film's. Everything after the TMDb person id is identical (Wikidata P4985,

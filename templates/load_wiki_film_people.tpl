@@ -64,13 +64,27 @@
 		{/if}
 
 		{if $scope == 'tv'}
+			{if $reloadResult}
+				<div class="alert alert-success">
+					<p>{$reloadResult.seasons|@count} {tr}seasons reloaded from Plex{/tr} ({$reloadResult.episodes} {tr}episodes{/tr}), {tr}credit directories rebuilt{/tr}:</p>
+					<ul>{foreach from=$reloadResult.seasons item=rs}<li>{$rs.title|escape} - {if $rs.matched}{$rs.episodes} {tr}episodes{/tr}{else}{tr}no Plex match, episodes re-read from disk{/tr}{/if}</li>{/foreach}</ul>
+					{if $reloadResult.next !== null}
+						{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+							{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
+							<input type="hidden" name="rl" value="{$reloadResult.next}" />
+							<p>{$reloadResult.next} {tr}of{/tr} {$reloadResult.total} {tr}seasons done.{/tr} <input type="submit" class="btn btn-primary" name="fReload" value="{tr}Continue reloading{/tr}" /></p>
+						{/form}
+					{/if}
+				</div>
+			{/if}
 			{if $buildResult}
 				<div class="alert alert-success">{$buildResult.seasons} {tr}seasons built{/tr}: {$buildResult.inserted} {tr}credit rows written{/tr}, {$buildResult.archived} {tr}archived{/tr}.</div>
 			{/if}
 			<p>{$program.seasons} {tr}seasons{/tr}, {$program.built} {tr}with credits built{/tr}.
 				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
 					{foreach from=$hiddenFields key=k item=v}{if $k != 'min'}<input type="hidden" name="{$k}" value="{$v|escape}" />{/if}{/foreach}
-					<input type="submit" class="btn btn-default" name="fBuild" value="{tr}Build credit directories{/tr}" />
+					<input type="submit" class="btn btn-default" name="fBuild" value="{tr}Build credit directories{/tr}" title="{tr}Re-reads the episodes already stored - it does not contact Plex{/tr}" />
+					<input type="submit" class="btn btn-default" name="fReload" value="{tr}Reload seasons from Plex (full cast){/tr}" title="{tr}Fetches each season's episodes and full cast from Plex, then rebuilds its credit directory{/tr}" />
 					&nbsp; {tr}Look up people credited on at least{/tr} <input type="number" min="1" name="min" value="{$min}" style="width:5em" /> {tr}episodes{/tr}
 					<input type="submit" class="btn btn-default" value="{tr}Apply{/tr}" />
 					&nbsp; <a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv">{tr}Pick another show{/tr}</a>
@@ -234,7 +248,7 @@
 						<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create / Link Selected{/tr}" />
 					{/form}
 				{else}
-					<p>{tr}Nobody left to look up.{/tr}</p>
+					{if $counts.belowMin}<p>{tr}Nobody left to look up at this minimum.{/tr} {$counts.belowMin} {tr}people credited on fewer episodes are not listed - lower the minimum above and press Apply to include them.{/tr}</p>{else}<p>{tr}Nobody left to look up.{/tr}</p>{/if}
 				{/if}
 			{/if}
 		{/if}
