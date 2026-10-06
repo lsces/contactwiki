@@ -285,6 +285,28 @@ capped), and on failure `getLastFetchError()` gives the reason - no response (ti
 the service's own HTTP error text, or throttling - which the page shows with its "Wikidata lookup
 failed" warning.
 
+### Film people pass - `load_wiki_film_people.php`
+
+The film-side counterpart of the people pass. Film cast and crew are plain text on a film's
+`director`/`writer`/`star` xref rows (`xkey_ext` = the name); `FisheyeFilm::surveyCredits()`
+(fisheyemedia) lists every distinct credited name with its roles, films and unlinked row ids, read
+straight from `liberty_xref`. This page matches each name to an existing wiki contact and links the
+rows - `xref` = the contact's `content_id`, `xkey` = its Wikidata Q-id, the same shape an album credit
+takes (`FisheyeFilm::linkCreditRows()`: only live, still-unlinked film credit rows are written, so a
+hand link is never overwritten).
+
+Matching is by name only (`ContactWikiTrait::normaliseName()` folds accents/case/punctuation;
+`nameForms()` also tries a "Surname, Forename" title flipped; `nameIndex()` indexes every wiki
+individual and group once per request). One match is pre-ticked, several are a radio choice, none is
+listed (most-credited first) but cannot be actioned yet. The posted contact id is re-checked against
+the name's candidates, never trusted. Link is an in-place update, which marks the row hand-owned for
+`reconcileItem()`: a later Plex reload leaves a linked credit alone (`kept_local`). The film page
+(`view_film.tpl`) links a linked name to `index.php?content_id=`, which the dispatcher routes to the
+contact's own page.
+
+Not built yet: resolving the unmatched through Wikidata (the film's `tmdb` id -> TMDb credits ->
+person ids -> Wikidata P4985) and TMDb, and creating their contacts.
+
 ### Artists pass - `load_wiki_artists.php`
 
 Surveys every top-level Music gallery for a linked contact (`music_gallery`), and for the gap set
@@ -331,8 +353,9 @@ exhaustive - add a Q-id when a real contact shows it's missing.
 
 ## Not yet built
 
-- Film/TV cast and crew linked to contacts - the same credit shape as music, once those credits
-  exist as xrefs rather than text.
+- Film/TV cast and crew: name-matching and linking to existing contacts is built (film people pass
+  above); resolving the rest through Wikidata/TMDb and creating contacts, and the same for TV
+  programs/episodes, are not.
 - Group membership over time (see the open question above), and creating members' contacts from a
   group's Wikidata claims.
 - A home for place of birth/death and date of death beyond the `dod` xref (DOB is

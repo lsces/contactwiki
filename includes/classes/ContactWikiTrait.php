@@ -272,6 +272,58 @@ trait ContactWikiTrait {
 		return $row ? [ 'content_id' => (int)$row['content_id'], 'title' => $row['title'], 'content_type_guid' => $row['content_type_guid'] ] : null;
 	}
 
+	/**
+	 * A name reduced to a comparison key: accents folded, lower-cased, punctuation and runs of space
+	 * collapsed ("Newton-John, Olivia" and "Olivia  Newton John" differ only by word order, not by
+	 * this). Word order is handled separately by nameForms().
+	 */
+	public static function normaliseName( string $pName ): string {
+		$name = function_exists( 'transliterator_transliterate' )
+			? (string)transliterator_transliterate( 'Any-Latin; Latin-ASCII; Lower()', $pName )
+			: strtolower( (string)iconv( 'UTF-8', 'ASCII//TRANSLIT', $pName ) );
+		return trim( preg_replace( '/[^a-z0-9]+/', ' ', $name ) );
+	}
+
+	/**
+	 * The comparison keys a contact's title answers to: as stored, and with a "Surname, Forename"
+	 * title flipped to "Forename Surname" (the order credits are written in).
+	 *
+	 * @return string[]
+	 */
+	public static function nameForms( string $pTitle ): array {
+		$forms = [ self::normaliseName( $pTitle ) ];
+		if( preg_match( '/^([^,]+),\s*(.+)$/u', trim( $pTitle ), $m ) ) {
+			$forms[] = self::normaliseName( $m[2].' '.$m[1] );
+		}
+		return array_values( array_unique( array_filter( $forms ) ) );
+	}
+
+	/**
+	 * Every wiki contact (individual and group) indexed by the name forms it answers to, for matching
+	 * a plain-text credit to an existing contact without a query per name.
+	 *
+	 * @return array<string, array<int, array{content_id:int, title:string, content_type_guid:string, qid:?string}>>
+	 *         normalised name => contacts (keyed by content_id)
+	 */
+	public static function nameIndex(): array {
+		global $gBitDb;
+		$rows = $gBitDb->getAll(
+			"SELECT lc.`content_id`, lc.`title`, lc.`content_type_guid`, x.`xkey_ext` AS qid
+			 FROM `".BIT_DB_PREFIX."liberty_content` lc
+			 LEFT JOIN `".BIT_DB_PREFIX."liberty_xref` x ON x.`content_id` = lc.`content_id` AND x.`item` = 'wikidata' AND x.`end_date` IS NULL
+			 WHERE lc.`content_type_guid` IN ( 'contactwikiindi', 'contactwikigroup' )"
+		) ?: [];
+		$index = [];
+		foreach( $rows as $row ) {
+			$contact = [ 'content_id' => (int)$row['content_id'], 'title' => $row['title'],
+				'content_type_guid' => $row['content_type_guid'], 'qid' => !empty( $row['qid'] ) ? strtoupper( $row['qid'] ) : null ];
+			foreach( self::nameForms( (string)$row['title'] ) as $form ) {
+				$index[$form][$contact['content_id']] = $contact;
+			}
+		}
+		return $index;
+	}
+
 	public static function findContactByMusicBrainzId( string $pMbid ): ?array {
 		return self::findWikiContactByXref( 'musicbrainz', strtolower( $pMbid ) );
 	}

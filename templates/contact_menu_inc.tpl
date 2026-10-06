@@ -9,5 +9,6 @@
 	<li><a class="item" href="{$smarty.const.CONTACTWIKI_PKG_URL}add_wiki_group.php">{biticon ipackage="icons" iname="address-book-new-symbolic" iexplain="Add Wiki Group" ilocation=menu}</a></li>
 	<li><a class="item" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_artists.php">{biticon ipackage="icons" iname="folder-open" iexplain="Load Wiki Artist Contacts" ilocation=menu}</a></li>
 	<li><a class="item" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_people.php">{biticon ipackage="icons" iname="system-users" iexplain="Load Wiki People" ilocation=menu}</a></li>
+	<li><a class="item" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php">{biticon ipackage="icons" iname="video-x-generic" iexplain="Load Wiki Film People" ilocation=menu}</a></li>
 {/if}
 {/strip}
