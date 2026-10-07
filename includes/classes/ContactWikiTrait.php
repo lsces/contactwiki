@@ -95,6 +95,16 @@ trait ContactWikiTrait {
 	 */
 	abstract protected function biographyDateProps(): array;
 
+	/** @var array<string,float> seconds spent per step of a contact build, summed over the request (shown on the people pass). */
+	public static array $stepTimings = [];
+
+	/** Add the time since $pSince to $pStep and return a fresh start time for the next step. */
+	protected static function stepDone( string $pStep, float $pSince ): float {
+		$now = microtime( true );
+		self::$stepTimings[$pStep] = ( self::$stepTimings[$pStep] ?? 0.0 ) + $now - $pSince;
+		return $now;
+	}
+
 	/**
 	 * (Re-)fetches this contact's Wikidata entity and applies every derived xref on top of it - the
 	 * raw entity json itself, each configured external-id link, this content type's own biography
@@ -127,7 +137,9 @@ trait ContactWikiTrait {
 		if( !$qid ) {
 			return [ 'error' => KernelTools::tra( 'No Wikidata id known for this contact - fetch one first.' ) ];
 		}
+		$t = microtime( true );
 		$entity = self::fetchWikidataEntity( $qid );
+		$t = self::stepDone( 'entity fetch', $t );
 		if( !$entity ) {
 			return [ 'error' => KernelTools::tra( 'Could not fetch that Wikidata entity.' ) ];
 		}
@@ -145,6 +157,7 @@ trait ContactWikiTrait {
 		// section) - a plain 'data' key here is silently ignored.
 		$this->upsertXref( $this->mContentId, 'wikidata', [ 'xkey_ext' => $qid, 'edit' => json_encode( $entity ) ] );
 		$items[] = KernelTools::tra( 'Wikidata entity data' ).' ('.$qid.')';
+		$t = self::stepDone( 'entity store', $t );
 
 		$mappedTypes = [];
 		if( $this instanceof ContactWikiGroup ) {
@@ -160,6 +173,7 @@ trait ContactWikiTrait {
 			$items[] = KernelTools::tra( 'Type tag added' ).': '.$added;
 		}
 
+		$t = self::stepDone( 'type tags', $t );
 		foreach( static::EXTERNAL_ID_PROPS as $item => $property ) {
 			$value = self::stringClaim( $entity, $property );
 			if( $value !== null ) {
@@ -167,6 +181,7 @@ trait ContactWikiTrait {
 				$items[] = $item.': '.$value;
 			}
 		}
+		$t = self::stepDone( 'external ids', $t );
 
 		// Biography re-fetch - a Reload should refresh everything Wikidata/Wikipedia can supply,
 		// same as the rest of this method. Always overwrites the existing note, same "source wins"
@@ -189,6 +204,7 @@ trait ContactWikiTrait {
 			}
 		}
 
+		$t = self::stepDone( 'biography', $t );
 		foreach( $this->biographyDateProps() as $item => $property ) {
 			$value = self::dateClaim( $entity, $property );
 			if( $value !== null ) {
@@ -197,6 +213,7 @@ trait ContactWikiTrait {
 			}
 		}
 
+		$t = self::stepDone( 'dates', $t );
 		$imageFilename = self::imageFilename( $entity );
 		if( $imageFilename ) {
 			$imagesDir = $this->getExtraImagePath( '' );
@@ -213,6 +230,7 @@ trait ContactWikiTrait {
 				$items[] = KernelTools::tra( 'Image' ).': '.$imageFilename;
 			}
 		}
+		self::stepDone( 'photo', $t );
 
 		return [ 'items' => $items ];
 	}
@@ -996,9 +1014,11 @@ trait ContactWikiTrait {
 		// Two Wikidata classes can map to the same code (orchestra + symphony orchestra -> WB02) -
 		// store each code once.
 		$storeHash['contact_types'] = array_values( array_unique( $storeHash['contact_types'] ) );
+		$t = microtime( true );
 		if( !$gContent->store( $storeHash ) ) {
 			return [ 'error' => implode( '; ', $gContent->mErrors ) ];
 		}
+		self::stepDone( 'contact store', $t );
 		$gContent->reloadFromWikidata( $pQid );
 		return [ 'content' => $gContent ];
 	}

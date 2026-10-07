@@ -55,7 +55,7 @@ const LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH = 100;
 const LOAD_WIKI_FILM_PEOPLE_GAP_US = 500000;
 // Wall-clock budget for one submit's creations. Production nginx cuts a request after 60s without a response, so a
 // run stops starting new people at this point and reports how many are left (they stay ticked for the next press).
-const LOAD_WIKI_FILM_PEOPLE_TIME_BUDGET = 35;
+const LOAD_WIKI_FILM_PEOPLE_TIME_BUDGET = 40;
 
 $scope = ( $_REQUEST['scope'] ?? '' ) === 'tv' ? 'tv' : 'film';
 $programId = $scope === 'tv' ? (int)( $_REQUEST['program_id'] ?? 0 ) : 0;
@@ -278,6 +278,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 
 if( $createResult ) {
 	$createResult['seconds'] = round( microtime( true ) - $createStarted, 1 );
+	$createResult['steps'] = array_map( fn( $v ) => round( $v, 1 ), ContactWikiIndividual::$stepTimings );
 }
 
 // ---- Survey after any write, so the page always shows what is left.
