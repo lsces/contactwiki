@@ -112,8 +112,8 @@ class WikimediaCache {
 				$ok = $info['result'] === CURLE_OK;
 				$results[$key] = [ 'status' => $ok ? (int)curl_getinfo( $handle, CURLINFO_RESPONSE_CODE ) : 0,
 					'body' => $ok ? (string)curl_multi_getcontent( $handle ) : null ];
+				// No curl_close(): deprecated since PHP 8.5 (it has done nothing since 8.0) - the handle is freed when it goes out of scope.
 				curl_multi_remove_handle( $multi, $handle );
-				curl_close( $handle );
 				unset( $active[spl_object_id( $handle )] );
 				if( $queue ) {
 					$start( array_shift( $queue ) );
