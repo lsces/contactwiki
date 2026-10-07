@@ -1366,7 +1366,7 @@ trait ContactWikiTrait {
 	 */
 	public static function prefetchWikidata( array $pQids ): array {
 		$started = microtime( true );
-		$stats = [ 'entities' => 0, 'summaries' => 0, 'images' => 0, 'seconds' => 0.0 ];
+		$stats = [ 'entities' => 0, 'summaries' => 0, 'images' => 0, 'wanted' => 0, 'refused' => [], 'seconds' => 0.0 ];
 		$userAgent = trim( preg_replace( '/^User-Agent:\s*/i', '', self::userAgentHeader() ) );
 		$qids = array_values( array_unique( array_filter( $pQids, fn( $q ) => preg_match( '/^Q\d+$/', (string)$q ) && !WikimediaCache::hasEntity( $q ) ) ) );
 
@@ -1374,7 +1374,11 @@ trait ContactWikiTrait {
 		foreach( $qids as $qid ) {
 			$requests[$qid] = "https://www.wikidata.org/wiki/Special:EntityData/$qid.json";
 		}
+		$stats['wanted'] += count( $requests );
 		foreach( WikimediaCache::multiFetch( $requests, $userAgent ) as $qid => $result ) {
+			if( $result['status'] !== 200 ) {
+				$stats['refused'][$result['status']] = ( $stats['refused'][$result['status']] ?? 0 ) + 1;
+			}
 			$entity = $result['status'] === 200 ? ( json_decode( (string)$result['body'], true )['entities'][$qid] ?? null ) : null;
 			if( $entity ) {
 				WikimediaCache::putEntity( $qid, $entity );
@@ -1393,8 +1397,10 @@ trait ContactWikiTrait {
 				$requests['i:'.$file] = self::commonsPhotoUrl( $file );
 			}
 		}
+		$stats['wanted'] += count( $requests );
 		foreach( WikimediaCache::multiFetch( $requests, $userAgent, WikimediaCache::CONCURRENCY, 25 ) as $key => $result ) {
 			if( $result['status'] !== 200 || $result['body'] === null || $result['body'] === '' ) {
+				$stats['refused'][$result['status']] = ( $stats['refused'][$result['status']] ?? 0 ) + 1;
 				continue;
 			}
 			if( $key[0] === 's' ) {
