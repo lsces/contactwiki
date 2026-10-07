@@ -416,8 +416,12 @@ if( $resolve ) {
 		// or its episodes) - older programmes are thin on TMDb but often well curated on Wikidata, and a name that matches someone tied to THIS show is a
 		// far safer match than a bare name search. One Wikidata query per show per request.
 		if( !$person['options'] && $scope === 'tv' ) {
-			$seriesIndex ??= ContactWikiIndividual::wikidataSeriesPeople(
-				ContactWikiIndividual::wikidataSeriesItems( FisheyeCredits::tmdbIdFor( $programId ), FisheyeCredits::imdbIdFor( $programId ) ) );
+			if( $seriesIndex === null ) {
+				// The run of this show (its own Wikidata item), so a person tied to it only in works from AFTER the run can be flagged, not pre-ticked.
+				$seriesPeriod = ContactWikiIndividual::wikidataSeriesPeriod( FisheyeCredits::tmdbIdFor( $programId ), FisheyeCredits::imdbIdFor( $programId ) );
+				$seriesIndex = ContactWikiIndividual::wikidataSeriesPeople(
+					ContactWikiIndividual::wikidataSeriesItems( FisheyeCredits::tmdbIdFor( $programId ), FisheyeCredits::imdbIdFor( $programId ) ), $seriesPeriod['end'] !== null );
+			}
 			foreach( $seriesIndex[ContactWikiIndividual::normaliseName( $person['name'] )] ?? [] as $match ) {
 				$existing = ContactWikiIndividual::findContactByWikidataQid( $match['qid'] );
 				if( $existing ) {
@@ -425,7 +429,10 @@ if( $resolve ) {
 				}
 				$person['options'][] = [ 'tmdb_id' => 0, 'tmdb_name' => '', 'qid' => $match['qid'], 'label' => $match['label'], 'description' => $match['description'],
 					'fit' => ContactWikiIndividual::descriptionFitsRoles( $match['description'], array_keys( $person['roles'] ) ),
-					'is_human' => true, 'from_tmdb' => false, 'from_series' => true, 'details' => null, 'existing' => $existing, 'value' => '0:'.$match['qid'] ];
+					'is_human' => true, 'from_tmdb' => false, 'from_series' => true, 'details' => null, 'existing' => $existing, 'value' => '0:'.$match['qid'],
+					// Tied to the show only in works from after its run: probably a Plex mix-up (metadata of a later series), so never pre-ticked.
+					'era_warn' => ( !empty( $seriesPeriod['end'] ) && !empty( $match['year'] ) && $match['year'] > $seriesPeriod['end'] + 1 )
+						? sprintf( KernelTools::tra( 'tied to this show on Wikidata only from %d - after its run ended in %d' ), $match['year'], $seriesPeriod['end'] ) : '' ];
 			}
 		}
 		if( !$person['options'] ) {
@@ -443,7 +450,7 @@ if( $resolve ) {
 				: ( !$person['tmdb_films'] ? ( $scope === 'tv' ? KernelTools::tra( 'This show has no TMDb id.' ) : KernelTools::tra( 'None of its films carries a TMDb id.' ) )
 				: ( $person['found']['error'] ? KernelTools::tra( 'TMDb lookup failed' ).': '.$person['found']['error']
 				: ( $scope === 'tv' ? KernelTools::tra( 'Not in TMDb\'s credits for this show, nor in the show\'s Wikidata cast, under this name.' ) : KernelTools::tra( 'Not found in the TMDb credits of its films under this name.' ) ) ) );
-		} elseif( count( $person['options'] ) > 1 ) {
+		} elseif( count( $person['options'] ) > 1 || !empty( $person['options'][0]['era_warn'] ) ) {
 			$person['status'] = 'choose';
 		} elseif( $person['options'][0]['existing'] ) {
 			$person['status'] = 'link_existing';

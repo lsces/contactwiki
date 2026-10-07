@@ -626,6 +626,30 @@ trait ContactWikiTrait {
 	}
 
 	/**
+	 * The years a series ran, from the Wikidata item its OWN id points to (IMDb id first - the period-specific item, e.g. "Doctor Who (1963-1989)" -
+	 * else TMDb's): start of the first item, end of the last, null end if still running or unknown. Lets a match be checked against the run.
+	 *
+	 * @return array{start:?int, end:?int}
+	 */
+	public static function wikidataSeriesPeriod( ?int $pTmdbTvId, ?string $pImdbId ): array {
+		$cond = $pImdbId && preg_match( '/^tt\d+$/', $pImdbId ) ? '?s wdt:P345 "'.$pImdbId.'"' : ( $pTmdbTvId ? '?s wdt:P4983 "'.(int)$pTmdbTvId.'"' : null );
+		if( !$cond ) {
+			return [ 'start' => null, 'end' => null ];
+		}
+		$start = $end = null;
+		$running = false;
+		foreach( self::wikidataSparql( 'SELECT ?s ?start ?end WHERE { '.$cond.' . OPTIONAL { ?s wdt:P580 ?start } OPTIONAL { ?s wdt:P582 ?end } }' ) ?? [] as $row ) {
+			$start = isset( $row['start']['value'] ) ? min( $start ?? 9999, (int)substr( $row['start']['value'], 0, 4 ) ) : $start;
+			if( isset( $row['end']['value'] ) ) {
+				$end = max( $end ?? 0, (int)substr( $row['end']['value'], 0, 4 ) );
+			} else {
+				$running = true;
+			}
+		}
+		return [ 'start' => $start, 'end' => $running ? null : $end ];
+	}
+
+	/**
 	 * Every person Wikidata ties to a series - as a cast member, director, screenwriter, producer or creator of the series itself or of any of its
 	 * parts (episodes, serials, one level of sub-series) - indexed by normalised name (label and English aliases). For an older programme TMDb's
 	 * credits are thin while Wikidata is often well curated; a credited name that matches someone tied to THIS show is a far safer match than a bare
@@ -634,13 +658,19 @@ trait ContactWikiTrait {
 	 * @param list<string> $pSeriesQids
 	 * @return array<string, list<array{qid:string, label:string, description:string}>>  normalised name => the people with that name
 	 */
-	public static function wikidataSeriesPeople( array $pSeriesQids ): array {
+	public static function wikidataSeriesPeople( array $pSeriesQids, bool $pWithYears = false ): array {
 		static $cache = [];
 		$qids = array_values( array_filter( array_unique( $pSeriesQids ), fn( $q ) => preg_match( '/^Q\d+$/', (string)$q ) ) );
 		sort( $qids );
-		$key = implode( ',', $qids );
+		$key = implode( ',', $qids ).( $pWithYears ? '+years' : '' );
 		if( !$qids ) {
 			return [];
+		}
+		// A show's Wikidata cast barely changes: keep it a few hours across requests (APCu where the stack has it), so paging through a show
+		// does not repeat three queries on every page.
+		$apcuKey = 'contactwiki_series_'.md5( $key );
+		if( !isset( $cache[$key] ) && function_exists( 'apcu_fetch' ) && ( $stored = apcu_fetch( $apcuKey ) ) !== false ) {
+			$cache[$key] = $stored;
 		}
 		if( !isset( $cache[$key] ) ) {
 			$values = implode( ' ', array_map( fn( $q ) => "wd:$q", $qids ) );
@@ -663,15 +693,34 @@ trait ContactWikiTrait {
 					$people[$m[1]]['names'][self::normaliseName( $row['alias']['value'] )] = true;
 				}
 			}
+			// The earliest year each person is tied to a dated part of the series (two light queries, joined here - one combined query times out).
+			$minYear = [];
+			if( $pWithYears ) {
+				$parts = '{ ?w wdt:P179 ?series } UNION { ?w wdt:P179 ?sub . ?sub wdt:P179 ?series }';
+				$years = [];
+				foreach( self::wikidataSparql( 'SELECT ?w ?year WHERE { VALUES ?series { '.$values.' } '.$parts.' OPTIONAL { ?w wdt:P577 ?d . BIND( YEAR( ?d ) AS ?year ) } }' ) ?? [] as $row ) {
+					if( isset( $row['year']['value'] ) && preg_match( '#/(Q\d+)$#', $row['w']['value'], $m ) ) {
+						$years[$m[1]] = min( (int)$row['year']['value'], $years[$m[1]] ?? 9999 );
+					}
+				}
+				foreach( self::wikidataSparql( 'SELECT DISTINCT ?w ?person WHERE { VALUES ?series { '.$values.' } '.$parts.' ?w wdt:P161|wdt:P57|wdt:P58|wdt:P162 ?person . ?person wdt:P31 wd:Q5 }' ) ?? [] as $row ) {
+					if( preg_match( '#/(Q\d+)$#', $row['w']['value'], $w ) && preg_match( '#/(Q\d+)$#', $row['person']['value'], $p ) && isset( $years[$w[1]] ) ) {
+						$minYear[$p[1]] = min( $years[$w[1]], $minYear[$p[1]] ?? 9999 );
+					}
+				}
+			}
 			$index = [];
 			foreach( $people as $person ) {
 				foreach( array_keys( $person['names'] ) as $name ) {
 					if( $name !== '' ) {
-						$index[$name][$person['qid']] = [ 'qid' => $person['qid'], 'label' => $person['label'], 'description' => $person['description'] ];
+						$index[$name][$person['qid']] = [ 'qid' => $person['qid'], 'label' => $person['label'], 'description' => $person['description'], 'year' => $minYear[$person['qid']] ?? null ];
 					}
 				}
 			}
 			$cache[$key] = array_map( 'array_values', $index );
+			if( $index && function_exists( 'apcu_store' ) ) {
+				apcu_store( $apcuKey, $cache[$key], 6 * 3600 );
+			}
 		}
 		return $cache[$key];
 	}

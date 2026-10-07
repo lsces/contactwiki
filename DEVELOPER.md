@@ -360,6 +360,12 @@ people unresolved. Before a person falls to the name search, `wikidataSeriesItem
 on items `part of the series` (P179) and one sub-series level), indexed by normalised label and English aliases. A credited name that matches someone tied to THIS show is offered pre-ticked (pick `0:Q...`,
 labelled "in this show's Wikidata cast"); two people of one name tied to the show stay a choice. Doctor Who: 98 of the 141 resolved this way (1,337 people tied to the show). Whatever is left falls through to:
 
+**Era guard.** A series' cast often hangs on an umbrella item (Wikidata ties Doctor Who's people to `Q34316`, all three periods: 1,891 people; the 1963-1989 item has none), so the index is franchise-wide.
+`wikidataSeriesPeriod()` reads the run of the show's OWN item (IMDb id first) and, for a show that has ended, each person's earliest tie year is fetched (`wikidataSeriesPeople( ..., true )`, two light queries - one
+combined query times out); a match tied to the show only in works from after its end (+1 year) is **never pre-ticked** and shows "tied to this show on Wikidata only from YYYY - after its run ended in YYYY - likely another
+series' credit mixed in by Plex". The people index is cached 6 hours in APCu when the stack has it (first lookup ~10 s, then ~4 s). Real case: classic Doctor Who - all 98 series-cast matches were tied only to works from 2005 on,
+because **Plex has no classic show**: the `TV Shows/Doctor Who/` folder is merged into the Doctor Who (2005) show (644 of its episodes hold a classic file), so classic Season 1 episodes 1-13 and the Specials carry 2005+ cast.
+
 **People Plex tags but TMDb lacks** (Pat Williams, Ted Mann on Andromeda: TMDb's crew list is incomplete) are "not resolved", but are no longer a dead end: `searchWikidataByName()`
 (Wikidata `wbsearchentities`, exact label/alias match, disambiguation pages dropped, up to 12 searches per page) lists candidate items with their descriptions (a screen/writing-job description is
 ticked as 'likely'), and each person also has "a contact from the name only" (`createNameOnly()`, tagged WP01/WP02/WP07 from the credit roles). Nothing is created until the person is
