@@ -562,7 +562,8 @@ trait ContactWikiTrait {
 		$ret = [];
 		foreach( array_chunk( array_values( array_unique( array_map( 'strval', $pTmdbIds ) ) ), 150 ) as $chunk ) {
 			$values = implode( ' ', array_map( fn( $id ) => '"'.addslashes( $id ).'"', $chunk ) );
-			$query = 'SELECT ?tid ?item ?itemLabel ?human WHERE { VALUES ?tid { '.$values.' } ?item wdt:P4985 ?tid . '
+			$query = 'SELECT ?tid ?item ?itemLabel ?human ?desc WHERE { VALUES ?tid { '.$values.' } ?item wdt:P4985 ?tid . '
+				.'OPTIONAL { ?item schema:description ?desc . FILTER( LANG( ?desc ) = "en" ) } '
 				.'BIND( EXISTS { ?item wdt:P31 wd:Q5 } AS ?human ) SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } }';
 			$context = stream_context_create( [ 'http' => [
 				'method'  => 'POST',
@@ -579,6 +580,7 @@ trait ContactWikiTrait {
 					$ret[(string)$row['tid']['value']][] = [
 						'qid'      => $m[1],
 						'label'    => $row['itemLabel']['value'] ?? $m[1],
+						'description' => $row['desc']['value'] ?? '',
 						'is_human' => ( $row['human']['value'] ?? '' ) === 'true',
 					];
 				}
@@ -596,6 +598,18 @@ trait ContactWikiTrait {
 	 * @param string[] $pRoles  the person's credit roles (director/writer/star/creator)
 	 * @return list<array{qid:string, label:string, description:string, fit:bool, likely:bool}>
 	 */
+	/** Does a Wikidata item's description fit one of the credited jobs (director/writer/star/creator)? */
+	public static function descriptionFitsRoles( string $pDescription, array $pRoles ): bool {
+		$patterns = [ 'director' => '/director/i', 'writer' => '/writer|screenwriter|dramatist|playwright|novelist|author/i',
+			'star' => '/actor|actress|performer|comedian|singer/i', 'creator' => '/creator|producer|writer|screenwriter|director/i' ];
+		foreach( $pRoles as $role ) {
+			if( isset( $patterns[$role] ) && preg_match( $patterns[$role], $pDescription ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public static function searchWikidataByName( string $pName, array $pRoles = [] ): array {
 		$context = stream_context_create( [ 'http' => [ 'header' => self::userAgentHeader(), 'timeout' => 15 ] ] );
 		$json = self::fetchExternal( 'https://www.wikidata.org/w/api.php?'.http_build_query( [
@@ -604,8 +618,6 @@ trait ContactWikiTrait {
 			return [];
 		}
 		$want = self::normaliseName( $pName );
-		$rolePatterns = [ 'director' => '/director/i', 'writer' => '/writer|screenwriter|dramatist|playwright|novelist|author/i',
-			'star' => '/actor|actress|performer|comedian|singer/i', 'creator' => '/creator|producer|writer|screenwriter|director/i' ];
 		$found = [];
 		foreach( json_decode( $json, true )['search'] ?? [] as $hit ) {
 			$description = (string)( $hit['description'] ?? '' );
@@ -615,10 +627,7 @@ trait ContactWikiTrait {
 				continue;
 			}
 			// Does the description fit the job they are credited with (a director credit prefers "television director")?
-			$fit = false;
-			foreach( $pRoles as $role ) {
-				$fit = $fit || ( isset( $rolePatterns[$role] ) && preg_match( $rolePatterns[$role], $description ) );
-			}
+			$fit = self::descriptionFitsRoles( $description, $pRoles );
 			$found[] = [ 'qid' => $hit['id'], 'label' => (string)( $hit['label'] ?? $hit['id'] ), 'description' => $description, 'fit' => $fit,
 				'likely' => (bool)preg_match( '/actor|actress|director|producer|writer|screenwriter|dramatist|playwright|television|film|comedian|presenter|novelist|cinematograph|editor|composer|journalist/i', $description ) ];
 		}

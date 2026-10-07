@@ -384,6 +384,8 @@ if( $resolve ) {
 					'tmdb_name' => $person['found']['names'][$tmdbId] ?? '',
 					'qid'      => $wd['qid'] ?? '',
 					'label'    => $wd['label'] ?? '',
+					'description' => $wd['description'] ?? '',
+					'fit'      => ContactWikiIndividual::descriptionFitsRoles( (string)( $wd['description'] ?? '' ), array_keys( $person['roles'] ) ),
 					'is_human' => $wd['is_human'] ?? true,
 					'from_tmdb' => !empty( $wd['from_tmdb'] ),
 					'details'  => $details,
@@ -392,6 +394,8 @@ if( $resolve ) {
 				];
 			}
 		}
+		// Where a TMDb id sits on several Wikidata items, the one whose description fits the credited job comes first (and is the default radio).
+		usort( $person['options'], fn( $a, $b ) => $b['fit'] <=> $a['fit'] );
 		// TMDb often holds several records for one person (R. D. Wingfield: two "Writing" ids). Within one
 		// show, the same name doing the same job more than once is the same person: take the record that
 		// has a Wikidata item (or the lowest id) and keep the others as aliases on the contact. Two
