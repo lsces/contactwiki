@@ -12,7 +12,7 @@
  *   - a name matching more than one                                  -> choose which, then link
  *
  * Stage 2, only when asked ("Look up next batch"), for the most-credited people still without a
- * contact, LOOKUP_BATCH (20) at a time:
+ * contact, LOOKUP_BATCH (40) at a time:
  *   - TMDb: the credits of the films the person appears in (their own `tmdb` ids) give the person's
  *     TMDb id; several ids = two people of that name, choose;
  *   - Wikidata: P4985 (TMDb person id) gives the Q-id - one SPARQL query for the batch; TMDb's own
@@ -50,7 +50,7 @@ $gBitSystem->verifyPermission( 'p_contact_update' );
 const LOAD_WIKI_FILM_PEOPLE_BATCH = 100;
 // People looked up (TMDb credits, Wikidata, contact creation) per submit - each is several network
 // round trips, so a long list is done in small batches with a gap between creations, as the music pass does.
-const LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH = 20;
+const LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH = 40;
 const LOAD_WIKI_FILM_PEOPLE_GAP_US = 500000;
 // Wall-clock budget for one submit's creations. Production nginx cuts a request after 60s without a response, so a
 // run stops starting new people at this point and reports how many are left (they stay ticked for the next press).
@@ -178,7 +178,7 @@ if( !empty( $_REQUEST['fLink'] ) ) {
 // ---- Stage 2 write: create (or find) the contact for each ticked person and link their credits.
 if( !empty( $_REQUEST['fCreate'] ) ) {
 	$createResult = [ 'created' => [], 'linked' => [], 'errors' => [], 'rows' => 0, 'remaining' => 0, 'seconds' => 0,
-		'kinds' => [ 'wikidata' => 0, 'tmdb' => 0, 'existing' => 0 ] ];
+		'kinds' => [ 'wikidata' => 0, 'tmdb' => 0, 'nameonly' => 0, 'existing' => 0 ] ];
 	$createStarted = microtime( true );
 	$survey = $surveyFn();
 	$picks = (array)( $_REQUEST['pick'] ?? [] );
@@ -213,7 +213,8 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			usleep( LOAD_WIKI_FILM_PEOPLE_GAP_US );
 		}
 		$personStarted = microtime( true );
-		$contact = ContactWikiIndividual::findContactByTmdbId( (string)$tmdbId )
+		// tmdb id 0 = no TMDb record: a Wikidata item picked by name ("0:Q123") or a contact from the name alone ("0:").
+		$contact = ( $tmdbId ? ContactWikiIndividual::findContactByTmdbId( (string)$tmdbId ) : null )
 			?: ( $qid !== '' ? ContactWikiIndividual::findContactByWikidataQid( $qid ) : null );
 		$wasCreated = false;
 		$needGap = !$contact && $qid !== '' && !\Bitweaver\Contactwiki\WikimediaCache::hasEntity( $qid );
@@ -221,7 +222,8 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			$gContent = new ContactWikiIndividual( null, $contact['content_id'] );
 			$gContent->load();
 		} else {
-			$created = $qid !== '' ? ContactWikiIndividual::createFromWikidata( $qid, false ) : ContactWikiIndividual::createFromTmdb( $tmdbId );
+			$created = $qid !== '' ? ContactWikiIndividual::createFromWikidata( $qid, false )
+				: ( $tmdbId ? ContactWikiIndividual::createFromTmdb( $tmdbId ) : ContactWikiIndividual::createNameOnly( $person['name'], array_keys( $person['roles'] ) ) );
 			if( empty( $created['content'] ) ) {
 				$createResult['errors'][] = [ 'name' => $person['name'], 'error' => $created['error'] ];
 				continue;
@@ -231,7 +233,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		}
 		// The contact must carry the TMDb id it was found by (a Wikidata item reached through TMDb's own
 		// external ids may not hold P4985 yet), so the next credit of this person matches it.
-		if( !ContactWikiIndividual::findContactByTmdbId( (string)$tmdbId ) ) {
+		if( $tmdbId && !ContactWikiIndividual::findContactByTmdbId( (string)$tmdbId ) ) {
 			$gContent->upsertXref( $gContent->mContentId, 'tmdb', [ 'xkey_ext' => (string)$tmdbId ] );
 		}
 		// Further TMDb records of the same person (kept as aliases on the contact's tmdb id).
@@ -246,7 +248,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			'seconds' => round( microtime( true ) - $personStarted, 1 ) ];
 		$createResult[$wasCreated ? 'created' : 'linked'][] = $entry;
 		// What it took: a Wikidata item (the slow, three-record kind), TMDb alone (a fraction of a second), or no creation at all.
-		$createResult['kinds'][!$wasCreated ? 'existing' : ( $qid !== '' ? 'wikidata' : 'tmdb' )]++;
+		$createResult['kinds'][!$wasCreated ? 'existing' : ( $qid !== '' ? 'wikidata' : ( $tmdbId ? 'tmdb' : 'nameonly' ) )]++;
 	}
 }
 
@@ -382,6 +384,15 @@ if( $resolve ) {
 			}
 		}
 		if( !$person['options'] ) {
+			// Tagged in Plex but TMDb has no record: offer Wikidata items of that exact name (a person decides - none is pre-selected as a
+			// pick) and a contact from the name alone. Searches are capped per request so a show with many such people stays quick.
+			static $nameSearches = 0;
+			$person['manual'] = [];
+			if( $nameSearches++ < 12 ) {
+				foreach( ContactWikiIndividual::searchWikidataByName( $person['name'] ) as $candidate ) {
+					$person['manual'][] = $candidate + [ 'value' => '0:'.$candidate['qid'] ];
+				}
+			}
 			$person['status'] = 'unresolved';
 			$person['reason'] = !$tokenSet ? KernelTools::tra( 'No TMDb access token is set.' )
 				: ( !$person['tmdb_films'] ? ( $scope === 'tv' ? KernelTools::tra( 'This show has no TMDb id.' ) : KernelTools::tra( 'None of its films carries a TMDb id.' ) )
@@ -413,8 +424,8 @@ $gBitSmarty->assign( 'counts', $counts );
 $gBitSmarty->assign( 'reviewList', array_slice( $reviewList, 0, LOAD_WIKI_FILM_PEOPLE_BATCH ) );
 $gBitSmarty->assign( 'reviewTotal', count( $reviewList ) );
 $gBitSmarty->assign( 'unmatchedShown', array_slice( $unmatchedAll, $start, 30 ) );
-// Everyone still without a contact, wherever the lookup offset is: a person stepped past (not found on TMDb, skipped) must stay visible.
-$gBitSmarty->assign( 'unmatchedEveryone', array_slice( $unmatchedAll, 0, 200 ) );
+// Whoever the lookup offset has stepped past (set aside or skipped) must stay visible - but only them: on a new show there is nobody, and no list.
+$gBitSmarty->assign( 'unmatchedSteppedPast', array_slice( $unmatchedAll, 0, min( $start, 200 ) ) );
 $gBitSmarty->assign( 'start', $start );
 $gBitSmarty->assign( 'lookupBatch', LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH );
 $gBitSmarty->assign( 'lookup', $lookup );

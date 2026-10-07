@@ -556,6 +556,56 @@ trait ContactWikiTrait {
 		return $ret;
 	}
 
+	/**
+	 * Wikidata items whose label (or alias) is exactly this name - for a credited person TMDb has no record of (Plex tags them, TMDb's
+	 * crew list lacks them). Nothing here is trusted: the caller shows each candidate with its description for a person to pick, none
+	 * pre-selected. Disambiguation pages are dropped; a description that reads like a screen/writing job marks the candidate 'likely'.
+	 *
+	 * @return list<array{qid:string, label:string, description:string, likely:bool}>
+	 */
+	public static function searchWikidataByName( string $pName ): array {
+		$context = stream_context_create( [ 'http' => [ 'header' => self::userAgentHeader(), 'timeout' => 15 ] ] );
+		$json = self::fetchExternal( 'https://www.wikidata.org/w/api.php?'.http_build_query( [
+			'action' => 'wbsearchentities', 'search' => $pName, 'language' => 'en', 'uselang' => 'en', 'type' => 'item', 'limit' => 8, 'format' => 'json' ] ), $context );
+		if( $json === false ) {
+			return [];
+		}
+		$want = self::normaliseName( $pName );
+		$found = [];
+		foreach( json_decode( $json, true )['search'] ?? [] as $hit ) {
+			$description = (string)( $hit['description'] ?? '' );
+			$matched = self::normaliseName( (string)( $hit['label'] ?? '' ) ) === $want
+				|| self::normaliseName( (string)( $hit['match']['text'] ?? '' ) ) === $want;
+			if( !$matched || empty( $hit['id'] ) || stripos( $description, 'disambiguation' ) !== false ) {
+				continue;
+			}
+			$found[] = [ 'qid' => $hit['id'], 'label' => (string)( $hit['label'] ?? $hit['id'] ), 'description' => $description,
+				'likely' => (bool)preg_match( '/actor|actress|director|producer|writer|screenwriter|dramatist|playwright|television|film|comedian|presenter|novelist|cinematograph|editor|composer|journalist/i', $description ) ];
+		}
+		usort( $found, fn( $a, $b ) => $b['likely'] <=> $a['likely'] );
+		return $found;
+	}
+
+	/**
+	 * A contact from a credited name alone - nothing external known (TMDb has no record, Wikidata none chosen). Tagged from the credit roles
+	 * (director -> WP02, writer -> WP07, star -> WP01). Its identity is its name; a later Reload from Wikidata still works once a Wikidata id is added.
+	 *
+	 * @param string[] $pRoles  the credit roles (director/writer/star)
+	 * @return array{content:object}|array{error:string}
+	 */
+	public static function createNameOnly( string $pName, array $pRoles ): array {
+		$gContent = new ContactWikiIndividual();
+		$parts = explode( ' ', trim( $pName ) );
+		$surname = array_pop( $parts ) ?: '';
+		$codes = [ 'star' => 'WP01', 'director' => 'WP02', 'writer' => 'WP07' ];
+		$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1,
+			'contact_types' => array_values( array_unique( array_filter( array_map( fn( $r ) => $codes[$r] ?? null, $pRoles ) ) ) ) ];
+		if( !$gContent->store( $storeHash ) ) {
+			return [ 'error' => implode( '; ', $gContent->mErrors ) ];
+		}
+		return [ 'content' => $gContent ];
+	}
+
 	public static function findContactByTmdbId( string $pTmdbId ): ?array {
 		global $gBitDb;
 		$pTmdbId = trim( $pTmdbId );

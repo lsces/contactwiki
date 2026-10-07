@@ -354,9 +354,14 @@ existing contact, create from Wikidata or TMDb, link). TMDb candidates are first
 holds several records for one person (the same writer under two ids): within one show, the same name doing the same job is **one
 person** - the record with a Wikidata item (else the lowest id) is used, the others are kept as **aliases** on the contact's `tmdb` xref
 (`data` = `{"also":["123"]}`, `addTmdbAliases()`, found again by `findContactByTmdbId()`); two different Wikidata items stay a choice.
-A show's **creator** (Gene Roddenberry on Andromeda) is on the TMDb show record's `created_by`, not in its aggregate credits, so `fetchTmdbTvCredits()` adds the
-creators (one extra `/tv/{id}` call) as writers - Plex credits them as such. The page always lists **everyone still without a contact** (up to 200) under the lookup,
-with a "Look them all up again from the top" button, because people are stepped past (not on TMDb, skipped) by the lookup offset and would otherwise vanish from view.
+**People Plex tags but TMDb lacks** (Pat Williams, Ted Mann on Andromeda: TMDb's crew list is incomplete) are "not resolved", but are no longer a dead end: `searchWikidataByName()`
+(Wikidata `wbsearchentities`, exact label/alias match, disambiguation pages dropped, up to 12 searches per page) lists candidate items with their descriptions (a screen/writing-job description is
+ticked as 'likely'), and each person also has "a contact from the name only" (`createNameOnly()`, tagged WP01/WP02/WP07 from the credit roles). Nothing is created until the person is
+ticked and a radio chosen; the pick is `0:Q123` (a Wikidata item chosen by name, no TMDb record) or `0:` (name only). Batch size is 40 (lookup and create cap); a batch of 40 on NCIS
+(31 Wikidata + 9 TMDb-only) looked up in 2.7 s and created in 11.4 s. The list at the foot of the page is only people the lookup offset has stepped past ("Stepped past (N)"), so a new
+show shows no list. A show's **creator** (Gene Roddenberry on Andromeda) is on the TMDb show record's `created_by`, not in its aggregate credits, so `fetchTmdbTvCredits()` adds the
+creators (one extra `/tv/{id}` call) as writers - Plex credits them as such. The page lists **whoever the lookup offset has stepped past** (up to 200) under the lookup,
+with a "Look them up again from the top" button, because people are stepped past (skipped, or left unresolved) by the lookup offset and would otherwise vanish from view.
 People left unticked stay at the top of the list until decided or skipped; only people with nothing to act on (not found on TMDb) are
 stepped past. Linking sets `xref`/`xkey` on every season row and the program row for that name; a later season reload carries the link
 across. There is no minimum-episodes control: everyone the season directories hold is listed. Linked names are reused, so a person

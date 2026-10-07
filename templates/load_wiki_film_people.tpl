@@ -45,7 +45,7 @@
 		{if $createResult}
 			{if $createResult.created}
 				<div class="alert alert-success">
-					<p>{tr}Contacts created and credits linked{/tr} <span class="text-muted">({$createResult.seconds}s {tr}creating{/tr}: {$createResult.kinds.wikidata} {tr}from Wikidata{/tr}, {$createResult.kinds.tmdb} {tr}from TMDb only{/tr}, {$createResult.kinds.existing} {tr}linked to an existing contact{/tr}{if $createResult.prefetch}, {tr}Wikimedia data fetched together in{/tr} {$createResult.prefetch.seconds}s{/if})</span>:</p>
+					<p>{tr}Contacts created and credits linked{/tr} <span class="text-muted">({$createResult.seconds}s {tr}creating{/tr}: {$createResult.kinds.wikidata} {tr}from Wikidata{/tr}, {$createResult.kinds.tmdb} {tr}from TMDb only{/tr}, {$createResult.kinds.nameonly} {tr}from the name only{/tr}, {$createResult.kinds.existing} {tr}linked to an existing contact{/tr}{if $createResult.prefetch}, {tr}Wikimedia data fetched together in{/tr} {$createResult.prefetch.seconds}s{/if})</span>:</p>
 					<ul>{foreach from=$createResult.created item=row}<li>{$row.name|escape} &rarr; <a href="{$row.view_url|escape}">{$row.title|escape}</a> ({$row.rows}) <span class="text-muted">{$row.seconds}s</span></li>{/foreach}</ul>
 				</div>
 			{/if}
@@ -212,7 +212,7 @@
 												<input type="checkbox" name="selected2[]" value="{$person.key|escape}" checked="checked" />
 												<input type="hidden" name="pick[{$person.key|escape}]" value="{$person.options[0].value|escape}" />
 												{if $person.options[0].aliases}<input type="hidden" name="also[{$person.key|escape}]" value="{$person.options[0].aliases|@implode:','}" />{/if}
-											{elseif $person.status == 'choose'}
+											{elseif $person.status == 'choose' || $person.status == 'unresolved'}
 												<input type="checkbox" name="selected2[]" value="{$person.key|escape}" />
 											{/if}
 										</td>
@@ -222,6 +222,12 @@
 										<td>
 											{if $person.status == 'unresolved'}
 												<span class="text-muted">{tr}Not resolved{/tr}: {$person.reason|escape}</span>
+												<br />{tr}Tick to create a contact for this person - choose which:{/tr}
+												{foreach from=$person.manual item=m name=man}
+													<br /><label><input type="radio" name="pick[{$person.key|escape}]" value="{$m.value|escape}" {if $smarty.foreach.man.first}checked="checked"{/if} />
+													{tr}Wikidata{/tr}: <a href="https://www.wikidata.org/wiki/{$m.qid|escape}" target="_blank" rel="noopener">{$m.label|escape} ({$m.qid|escape})</a>{if $m.description} - {$m.description|escape}{/if}{if $m.likely} <span class="text-success">&#10003;</span>{/if}</label>
+												{/foreach}
+												<br /><label><input type="radio" name="pick[{$person.key|escape}]" value="0:" {if !$person.manual}checked="checked"{/if} /> {tr}A contact from the name only{/tr} <span class="text-muted">({tr}no Wikidata or TMDb id{/tr})</span></label>
 											{else}
 												{foreach from=$person.options item=o name=opts}
 													{if $person.status == 'choose'}<label><input type="radio" name="pick[{$person.key|escape}]" value="{$o.value|escape}" {if $smarty.foreach.opts.first}checked="checked"{/if} />{/if}
@@ -246,16 +252,16 @@
 						<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create / Link Selected{/tr}" />
 					{/form}
 				{else}
-					<p>{tr}Nobody left to look up from here.{/tr}{if $counts.unmatched} {$counts.unmatched} {tr}people still have no contact - they are listed below.{/tr}{/if}</p>
+					<p>{tr}Nobody left to look up from here.{/tr}{if $unmatchedSteppedPast} {tr}Those stepped past are listed below.{/tr}{/if}</p>
 				{/if}
-				{if $counts.unmatched}
-					<h3>{tr}Everyone still without a contact{/tr} ({$counts.unmatched})</h3>
-					<p><a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?fResolve=1&amp;start=0{foreach from=$hiddenFields key=k item=v}&amp;{$k}={$v|escape:'url'}{/foreach}">{tr}Look them all up again from the top{/tr}</a>
-						<span class="text-muted">{tr}People are stepped past when they cannot be found on TMDb or are skipped; they stay listed here.{/tr}</span></p>
+				{if $unmatchedSteppedPast}
+					<h3>{tr}Stepped past{/tr} ({$unmatchedSteppedPast|@count})</h3>
+					<p><a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?fResolve=1&amp;start=0{foreach from=$hiddenFields key=k item=v}&amp;{$k}={$v|escape:'url'}{/foreach}">{tr}Look them up again from the top{/tr}</a>
+						<span class="text-muted">{tr}Not found on TMDb, or skipped - they have no contact yet.{/tr}</span></p>
 					<table class="table table-condensed">
 						<thead><tr><th>{tr}Credited as{/tr}</th><th>{if $scope == 'tv'}{tr}Episodes{/tr}{else}{tr}Credits{/tr}{/if}</th><th>{if $scope == 'tv'}{tr}Seasons{/tr}{else}{tr}Films{/tr}{/if}</th></tr></thead>
 						<tbody>
-							{foreach from=$unmatchedEveryone item=person}
+							{foreach from=$unmatchedSteppedPast item=person}
 								<tr>
 									<td>{$person.name|escape}</td>
 									<td>{if $scope == 'tv' && $person.episodes}{$person.episodes} {tr}episodes{/tr}{else}{$person.credits}{/if} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
