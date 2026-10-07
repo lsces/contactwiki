@@ -307,7 +307,7 @@ if( $createResult ) {
 
 // ---- Survey after any write, so the page always shows what is left.
 $survey = $surveyFn();
-$counts = [ 'linked' => 0, 'match' => 0, 'choose' => 0, 'unmatched' => 0 ];
+$counts = [ 'linked' => 0, 'match' => 0, 'choose' => 0, 'unmatched' => 0, 'minor' => 0 ];
 $reviewList = [];
 $unmatchedAll = [];
 foreach( $survey['people'] as $key => $person ) {
@@ -330,6 +330,9 @@ foreach( $survey['people'] as $key => $person ) {
 	} elseif( $candidates ) {
 		$counts['choose']++;
 		$reviewList[] = $person;
+	} elseif( !empty( $person['minor'] ) ) {
+		// Far down a film's cast and not an existing contact: stays a plain-text credit.
+		$counts['minor']++;
 	} else {
 		$counts['unmatched']++;
 		$unmatchedAll[] = $person;

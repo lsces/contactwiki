@@ -111,7 +111,7 @@
 
 		<p>{if $scope == 'tv'}{$program.seasons} {tr}seasons and the show{/tr}{else}{$survey.films} {tr}films{/tr}{/if}, {$survey.credits} {tr}credits{/tr}, {$survey.people} {tr}distinct people{/tr}:
 			{$counts.linked} {tr}already linked to a contact{/tr}, {$counts.match} {tr}matching one contact by name{/tr},
-			{$counts.choose} {tr}matching several{/tr}, {$counts.unmatched} {tr}with no contact yet{/tr}.</p>
+			{$counts.choose} {tr}matching several{/tr}, {$counts.unmatched} {tr}with no contact yet{/tr}{if $counts.minor}, {$counts.minor} {tr}further down the cast, left as plain credits{/tr}{/if}.</p>
 
 		{if $reviewList}
 			{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
