@@ -66,6 +66,24 @@
 			{/if}
 		{/if}
 
+		{if $scope == 'film'}
+			{if $reloadResult}
+				<div class="alert alert-success">
+					<p>{$reloadResult.films} {tr}films reloaded from Plex{/tr} ({$reloadResult.stars} {tr}stars{/tr}, {$reloadResult.seconds}s).
+					{if $reloadResult.unmatched}{tr}No Plex match for{/tr}: {$reloadResult.unmatched|@implode:'; '|escape}.{/if}</p>
+					{if $reloadResult.next !== null}
+						{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+							<input type="hidden" name="rl" value="{$reloadResult.next}" />
+							<p>{$reloadResult.next} {tr}of{/tr} {$reloadResult.total} {tr}films done.{/tr} <input type="submit" class="btn btn-primary" name="fReload" value="{tr}Continue reloading{/tr}" /></p>
+						{/form}
+					{/if}
+				</div>
+			{/if}
+			{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+				<p><input type="submit" class="btn btn-default" name="fReload" value="{tr}Reload film cast from Plex{/tr}" title="{tr}Refreshes every film's director, writer and full star list from Plex - links to contacts and hand edits are kept{/tr}" /></p>
+			{/form}
+		{/if}
+
 		{if $scope == 'tv'}
 			{if $reloadResult}
 				<div class="alert alert-success">

@@ -108,6 +108,30 @@ $reloadResult = null;
 $start = max( 0, (int)( $_REQUEST['start'] ?? 0 ) );
 $resolve = !empty( $_REQUEST['fResolve'] ) || !empty( $_REQUEST['fCreate'] );
 
+// ---- Films: reload every film's credits from Plex (the full cast - films registered earlier hold only the first five stars).
+// Credits only, no thumbnails or ffprobe, so a few hundred films per submit would be possible; a time budget with a Continue keeps it inside the server limit.
+if( $scope === 'film' && !empty( $_REQUEST['fReload'] ) ) {
+	$filmIds = array_map( 'intval', $gBitDb->getCol( "SELECT `content_id` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_type_guid` = 'fisheyefilm' ORDER BY `content_id`" ) ?: [] );
+	$reloadResult = [ 'films' => 0, 'unmatched' => [], 'stars' => 0, 'next' => null, 'total' => count( $filmIds ) ];
+	$reloadStarted = microtime( true );
+	for( $i = max( 0, (int)( $_REQUEST['rl'] ?? 0 ) ); $i < count( $filmIds ); $i++ ) {
+		if( microtime( true ) - $reloadStarted > 25 ) {
+			$reloadResult['next'] = $i;
+			break;
+		}
+		$film = new FisheyeFilm( null, $filmIds[$i] );
+		$film->load();
+		$reloaded = $film->reloadPlexCredits();
+		$reloadResult['films']++;
+		if( $reloaded['matched'] ) {
+			$reloadResult['stars'] += $reloaded['counts']['star'] ?? 0;
+		} elseif( count( $reloadResult['unmatched'] ) < 30 ) {
+			$reloadResult['unmatched'][] = $film->getTitle();
+		}
+	}
+	$reloadResult['seconds'] = round( microtime( true ) - $reloadStarted, 1 );
+}
+
 // ---- TV: reload the seasons' episodes from Plex (full cast per episode), which rebuilds each credit directory.
 // Each season is dozens of Plex calls and thumbnail fetches, so a few seasons per submit with a Continue.
 if( $scope === 'tv' && !empty( $_REQUEST['fReload'] ) ) {
