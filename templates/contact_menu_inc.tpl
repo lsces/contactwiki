@@ -11,5 +11,6 @@
 	<li><a class="item" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_people.php">{biticon ipackage="icons" iname="system-users" iexplain="Load Wiki People" ilocation=menu}</a></li>
 	<li><a class="item" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php">{biticon ipackage="icons" iname="video-x-generic" iexplain="Load Wiki Film People" ilocation=menu}</a></li>
 	<li><a class="item" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv">{biticon ipackage="icons" iname="video-display" iexplain="Load Wiki TV People" ilocation=menu}</a></li>
+	<li><a class="item" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_photos.php">{biticon ipackage="icons" iname="image-x-generic" iexplain="Load Wiki Photos" ilocation=menu}</a></li>
 {/if}
 {/strip}

@@ -221,24 +221,126 @@ trait ContactWikiTrait {
 		if( $imageFilename && self::$skipPhotos && WikimediaCache::getImage( $imageFilename ) === null ) {
 			$imageFilename = null;
 		}
-		if( $imageFilename ) {
-			$imagesDir = $this->getExtraImagePath( '' );
-			$ext = strtolower( pathinfo( $imageFilename, PATHINFO_EXTENSION ) ) ?: 'jpg';
-			$storedName = 'wikidata.'.$ext;
-			KernelTools::mkdir_p( $imagesDir );
-			if( self::downloadCommonsFile( $imageFilename, $imagesDir.$storedName ) ) {
-				// Commons may have re-rendered the file (an SVG or TIFF comes back as PNG/JPEG) - name it for what it is.
-				$realExt = self::imageExtensionOf( $imagesDir.$storedName );
-				if( $realExt !== null && $realExt !== $ext && @rename( $imagesDir.$storedName, $imagesDir.'wikidata.'.$realExt ) ) {
-					$storedName = 'wikidata.'.$realExt;
-				}
-				$this->upsertXref( $this->mContentId, 'image', [ 'xkey_ext' => $storedName ] );
-				$items[] = KernelTools::tra( 'Image' ).': '.$imageFilename;
-			}
+		if( $imageFilename && $this->storeCommonsPhoto( $imageFilename ) ) {
+			$items[] = KernelTools::tra( 'Image' ).': '.$imageFilename;
 		}
 		self::stepDone( 'photo', $t );
 
 		return [ 'items' => $items ];
+	}
+
+	/**
+	 * Download a Commons photo (the cache first, see WikimediaCache) into this contact's own image folder and record it as its 'image' xref.
+	 *
+	 * @return bool  false if the download failed
+	 */
+	public function storeCommonsPhoto( string $pImageFilename ): bool {
+		$imagesDir = $this->getExtraImagePath( '' );
+		$ext = strtolower( pathinfo( $pImageFilename, PATHINFO_EXTENSION ) ) ?: 'jpg';
+		$storedName = 'wikidata.'.$ext;
+		KernelTools::mkdir_p( $imagesDir );
+		if( !self::downloadCommonsFile( $pImageFilename, $imagesDir.$storedName ) ) {
+			return false;
+		}
+		// Commons may have re-rendered the file (an SVG or TIFF comes back as PNG/JPEG) - name it for what it is.
+		$realExt = self::imageExtensionOf( $imagesDir.$storedName );
+		if( $realExt !== null && $realExt !== $ext && @rename( $imagesDir.$storedName, $imagesDir.'wikidata.'.$realExt ) ) {
+			$storedName = 'wikidata.'.$realExt;
+		}
+		$this->upsertXref( $this->mContentId, 'image', [ 'xkey_ext' => $storedName ] );
+		return true;
+	}
+
+	/**
+	 * Fill in the photos wiki contacts are missing - the ones created without (the people pass leaves photos out when Wikimedia is throttling).
+	 * A contact is a candidate if its stored Wikidata entity names an image (P18) and it has no 'image' of its own, so nothing is fetched
+	 * to find out. Photos are fetched a few at a time into the cache, then stored; if Wikimedia refuses most of a chunk the pass stops
+	 * rather than wait it out - the refused contacts stay candidates for a later run (this method is also what a cron/CLI wrapper would call).
+	 *
+	 * @param int   $pAfter   only contacts with a content_id above this (the cursor a Continue carries)
+	 * @param float $pBudget  seconds after which no new chunk is started
+	 * @return array{done:int, failed:int, throttled:bool, next:?int, missing:int, seconds:float, contacts:list<array{content_id:int,title:string}>}
+	 */
+	public static function loadMissingPhotos( int $pAfter = 0, float $pBudget = 30.0 ): array {
+		global $gBitDb;
+		$started = microtime( true );
+		$result = [ 'done' => 0, 'failed' => 0, 'throttled' => false, 'next' => null, 'missing' => 0, 'seconds' => 0.0, 'contacts' => [] ];
+		$candidateSql = "FROM `".BIT_DB_PREFIX."liberty_content` c
+			JOIN `".BIT_DB_PREFIX."liberty_xref` w ON w.`content_id` = c.`content_id` AND w.`item` = 'wikidata' AND w.`end_date` IS NULL
+			WHERE c.`content_type_guid` IN ( 'contactwikiindi', 'contactwikigroup' ) AND w.`data` CONTAINING '\"P18\"'
+			AND NOT EXISTS ( SELECT 1 FROM `".BIT_DB_PREFIX."liberty_xref` i WHERE i.`content_id` = c.`content_id` AND i.`item` = 'image' AND i.`end_date` IS NULL )";
+		$userAgent = trim( preg_replace( '/^User-Agent:\s*/i', '', self::userAgentHeader() ) );
+		$cursor = $pAfter;
+		while( microtime( true ) - $started < $pBudget ) {
+			$rows = $gBitDb->getAll( "SELECT FIRST 20 c.`content_id`, c.`content_type_guid`, c.`title`, w.`data` $candidateSql AND c.`content_id` > ? ORDER BY c.`content_id`", [ $cursor ] ) ?: [];
+			if( !$rows ) {
+				break;
+			}
+			$files = [];
+			foreach( $rows as $row ) {
+				$entity = json_decode( (string)$row['data'], true );
+				$file = is_array( $entity ) ? self::imageFilename( $entity ) : null;
+				if( $file !== null && WikimediaCache::getImage( $file ) === null ) {
+					$files[$file] = self::commonsPhotoUrl( $file );
+				}
+			}
+			$requests = [];
+			foreach( $files as $file => $url ) {
+				$requests['i:'.$file] = $url;
+			}
+			$refused = [];
+			foreach( [ 0, 1 ] as $attempt ) {
+				$fetched = WikimediaCache::multiFetch( $attempt ? array_intersect_key( $requests, array_flip( $refused ) ) : $requests, $userAgent, $attempt ? 1 : 3, 25 );
+				$refused = [];
+				foreach( $fetched as $key => $r ) {
+					if( $r['status'] === 200 && (string)$r['body'] !== '' ) {
+						WikimediaCache::putImage( substr( $key, 2 ), $r['body'] );
+					} elseif( in_array( $r['status'], [ 429, 503 ], true ) ) {
+						$refused[] = $key;
+						$wait = max( $wait ?? 0, $r['retry_after'] );
+					}
+				}
+				if( !$refused || !$requests ) {
+					break;
+				}
+				if( !$attempt ) {
+					sleep( min( 6, max( 2, $wait ?? 0 ) ) );
+				}
+			}
+			if( $requests && count( $refused ) * 2 > count( $requests ) ) {
+				// Wikimedia is refusing most of them: stop, leave these for later.
+				$result['throttled'] = true;
+				break;
+			}
+			foreach( $rows as $row ) {
+				$cursor = (int)$row['content_id'];
+				$entity = json_decode( (string)$row['data'], true );
+				$file = is_array( $entity ) ? self::imageFilename( $entity ) : null;
+				if( $file === null || in_array( 'i:'.$file, $refused, true ) ) {
+					$result['failed']++;
+					continue;
+				}
+				$class = $row['content_type_guid'] === 'contactwikigroup' ? ContactWikiGroup::class : ContactWikiIndividual::class;
+				$contact = new $class( null, (int)$row['content_id'] );
+				$contact->load();
+				if( $contact->storeCommonsPhoto( $file ) ) {
+					$result['done']++;
+					if( count( $result['contacts'] ) < 40 ) {
+						$result['contacts'][] = [ 'content_id' => (int)$row['content_id'], 'title' => (string)$row['title'] ];
+					}
+				} else {
+					$result['failed']++;
+				}
+			}
+			if( count( $rows ) < 20 ) {
+				$cursor = 0;
+				break;
+			}
+		}
+		$result['next'] = $cursor > 0 && microtime( true ) - $started >= $pBudget ? $cursor : null;
+		$result['missing'] = (int)$gBitDb->getOne( "SELECT COUNT(*) $candidateSql" );
+		$result['seconds'] = round( microtime( true ) - $started, 1 );
+		return $result;
 	}
 
 	/**
