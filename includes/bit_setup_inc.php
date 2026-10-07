@@ -84,6 +84,18 @@ if( $gBitSystem->isPackageActive( 'contactwiki' ) ) {
 		// Per-artist actions offered by fisheyemedia's music pages (read generically via
 		// getServiceValues('music_artist_tools')) - 'url' gets the artist gallery's gallery_id
 		// appended, so the people pass opens straight on that artist's folder.
+		// Tools offered on a TV show's own page (fisheyemedia's view_program.php reads this generically):
+		// 'url' gets the program's content_id appended; 'credit_status' asks the page to show how far the
+		// show's credits are linked (a count of those still unlinked, or a tick when none are).
+		'program_tools'         => [
+			[
+				'title'         => 'Load Wiki TV People',
+				'url'           => CONTACTWIKI_PKG_URL.'load_wiki_film_people.php?scope=tv&program_id=',
+				'icon'          => 'system-users',
+				'perm'          => 'p_contact_update',
+				'credit_status' => true,
+			],
+		],
 		'music_artist_tools'    => [
 			[
 				'title' => 'Load its contacts',
