@@ -15,9 +15,15 @@ $formContactWikiGeneral = [
 		'type'    => 'text',
 	],
 	"contactwiki_tmdb_token" => [
-		'heading' => 'TMDb - optional, not currently used',
+		'heading' => 'TMDb - the film and TV people tools',
 		'label'   => 'TMDb API Read Access Token',
-		'note'    => 'Unrelated to the contact address above: a secret token from themoviedb.org/settings/api (the long v4 "API Read Access Token" starting eyJ..., not the shorter v3 "API Key"). Nothing uses it at present - biographies come from Wikipedia - it is kept for possible future film/TV person biographies. Can be left blank.',
+		'note'    => 'Unrelated to the contact address above: a secret token from themoviedb.org/settings/api (the long v4 "API Read Access Token" starting eyJ..., not the shorter v3 "API Key"). The film and TV people tools (Load Wiki Film People / Load Wiki TV People) use it to find who a credited name is on TMDb and to create a contact for someone Wikidata does not have; without it they cannot look anybody up. Biographies still come from Wikipedia (or TMDb for a person with no Wikipedia article).',
+		'type'    => 'text',
+	],
+	"contactwiki_photo_width" => [
+		'heading' => 'Contact photos from Wikimedia Commons',
+		'label'   => 'Photo width (pixels)',
+		'note'    => 'Commons sends a copy resized to this width instead of the original upload (press photos run to many megabytes). Blank means 400 (the size the media library stores its stills at); a smaller image is never enlarged; the word "original" fetches the file exactly as uploaded. Applies to photos fetched from now on - an existing contact keeps its photo until it is reloaded from Wikidata.',
 		'type'    => 'text',
 	],
 ];

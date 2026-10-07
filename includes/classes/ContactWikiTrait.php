@@ -204,6 +204,11 @@ trait ContactWikiTrait {
 			$storedName = 'wikidata.'.$ext;
 			KernelTools::mkdir_p( $imagesDir );
 			if( self::downloadCommonsFile( $imageFilename, $imagesDir.$storedName ) ) {
+				// Commons may have re-rendered the file (an SVG or TIFF comes back as PNG/JPEG) - name it for what it is.
+				$realExt = self::imageExtensionOf( $imagesDir.$storedName );
+				if( $realExt !== null && $realExt !== $ext && @rename( $imagesDir.$storedName, $imagesDir.'wikidata.'.$realExt ) ) {
+					$storedName = 'wikidata.'.$realExt;
+				}
 				$this->upsertXref( $this->mContentId, 'image', [ 'xkey_ext' => $storedName ] );
 				$items[] = KernelTools::tra( 'Image' ).': '.$imageFilename;
 			}
@@ -1114,7 +1119,7 @@ trait ContactWikiTrait {
 				$requests['s:'.$title] = 'https://en.wikipedia.org/api/rest_v1/page/summary/'.rawurlencode( $title );
 			}
 			if( ( $file = self::imageFilename( $entity ) ) !== null && WikimediaCache::getImage( $file ) === null ) {
-				$requests['i:'.$file] = 'https://commons.wikimedia.org/wiki/Special:FilePath/'.rawurlencode( $file );
+				$requests['i:'.$file] = self::commonsPhotoUrl( $file );
 			}
 		}
 		foreach( WikimediaCache::multiFetch( $requests, $userAgent, WikimediaCache::CONCURRENCY, 25 ) as $key => $result ) {
@@ -1366,6 +1371,31 @@ trait ContactWikiTrait {
 	// no need to compute the md5-hash-bucketed upload.wikimedia.org path by hand. Downloaded and
 	// stored locally (see getExtraImagePath()), never hotlinked - same reasoning as every other
 	// externally-sourced image already saved locally elsewhere in this stack.
+	/**
+	 * Where a Commons photo is fetched from: Special:FilePath with a width, so Commons sends a resized copy rather than the
+	 * original (press photos run to many megabytes - the first 645 stored averaged 1.9 MB, the largest was 171 MB). Width
+	 * is the contactwiki_photo_width setting, default 400 (the size fisheyemedia stores its stills at); 'original' fetches the file as uploaded. Commons never upscales
+	 * (a smaller image comes back unchanged) and renders SVG/TIFF as a raster, so the stored type can differ from the name
+	 * (see imageExtensionOf()). Better quality can be loaded later from a contact's edit page.
+	 */
+	public static function commonsPhotoUrl( string $pFilename ): string {
+		global $gBitSystem;
+		$width = strtolower( trim( (string)$gBitSystem->getConfig( 'contactwiki_photo_width', '' ) ) );
+		$url = 'https://commons.wikimedia.org/wiki/Special:FilePath/'.rawurlencode( $pFilename );
+		if( $width === 'original' ) {
+			return $url;
+		}
+		return $url.'?width='.( ctype_digit( $width ) && (int)$width >= 100 ? min( (int)$width, 4000 ) : 400 );
+	}
+
+	/** The file extension for what an image file really is (Commons may re-render a TIFF or SVG as JPEG/PNG), or null if unknown. */
+	public static function imageExtensionOf( string $pPath ): ?string {
+		$info = @getimagesize( $pPath );
+		return match( $info[2] ?? null ) {
+			IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_GIF => 'gif', IMAGETYPE_WEBP => 'webp', default => null,
+		};
+	}
+
 	public static function downloadCommonsFile( string $pFilename, string $pDestPath ): bool {
 		if( ( $cached = WikimediaCache::getImage( $pFilename ) ) !== null ) {
 			return copy( $cached, $pDestPath );
@@ -1375,8 +1405,7 @@ trait ContactWikiTrait {
 			'timeout' => 20,
 			'follow_location' => 1,
 		] ] );
-		$url = 'https://commons.wikimedia.org/wiki/Special:FilePath/'.rawurlencode( $pFilename );
-		$bytes = self::fetchExternal( $url, $context );
+		$bytes = self::fetchExternal( self::commonsPhotoUrl( $pFilename ), $context );
 		if( $bytes === false || $bytes === '' ) {
 			return false;
 		}
