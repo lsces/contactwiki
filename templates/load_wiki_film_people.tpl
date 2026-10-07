@@ -45,7 +45,7 @@
 		{if $createResult}
 			{if $createResult.created}
 				<div class="alert alert-success">
-					<p>{tr}Contacts created and credits linked{/tr} <span class="text-muted">({$createResult.seconds}s {tr}creating{/tr})</span>:</p>
+					<p>{tr}Contacts created and credits linked{/tr} <span class="text-muted">({$createResult.seconds}s {tr}creating{/tr}{if $createResult.prefetch}, {tr}Wikimedia data fetched together in{/tr} {$createResult.prefetch.seconds}s{/if})</span>:</p>
 					<ul>{foreach from=$createResult.created item=row}<li>{$row.name|escape} &rarr; <a href="{$row.view_url|escape}">{$row.title|escape}</a> ({$row.rows}) <span class="text-muted">{$row.seconds}s</span></li>{/foreach}</ul>
 				</div>
 			{/if}

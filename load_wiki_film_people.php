@@ -183,7 +183,18 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 	$picks = (array)( $_REQUEST['pick'] ?? [] );
 	$attempted = 0;
 	$needGap = false;
-	foreach( array_slice( array_map( 'strval', (array)( $_REQUEST['selected2'] ?? [] ) ), 0, LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH ) as $key ) {
+	$ticked = array_slice( array_map( 'strval', (array)( $_REQUEST['selected2'] ?? [] ) ), 0, LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH );
+	// Everyone about to be created from a Wikidata item has their entity, Wikipedia text and photo fetched together
+	// up front (a few at a time), so the loop below makes no Wikimedia requests of its own.
+	$prefetch = [];
+	foreach( $ticked as $key ) {
+		if( !empty( $survey['people'][$key]['unlinked_ids'] ) && preg_match( '/^(\d+):(Q\d+)$/', (string)( $picks[$key] ?? '' ), $pm )
+			&& !ContactWikiIndividual::findContactByTmdbId( $pm[1] ) && !ContactWikiIndividual::findContactByWikidataQid( $pm[2] ) ) {
+			$prefetch[] = $pm[2];
+		}
+	}
+	$createResult['prefetch'] = $prefetch ? ContactWikiIndividual::prefetchWikidata( $prefetch ) : null;
+	foreach( $ticked as $key ) {
 		$person = $survey['people'][$key] ?? null;
 		// "<tmdb person id>:<Q-id or empty>" - both re-validated, the form is not trusted.
 		if( !$person || !$person['unlinked_ids'] || !preg_match( '/^(\d+):(Q\d+)?$/', (string)( $picks[$key] ?? '' ), $m ) ) {
@@ -196,7 +207,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			continue;
 		}
 		$attempted++;
-		// The pause is for Wikimedia's rate limits - only after a creation that actually called it.
+		// The pause is for Wikimedia's rate limits - only before a person whose data was NOT prefetched (a fallback fetch).
 		if( $needGap ) {
 			usleep( LOAD_WIKI_FILM_PEOPLE_GAP_US );
 		}
@@ -204,7 +215,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		$contact = ContactWikiIndividual::findContactByTmdbId( (string)$tmdbId )
 			?: ( $qid !== '' ? ContactWikiIndividual::findContactByWikidataQid( $qid ) : null );
 		$wasCreated = false;
-		$needGap = !$contact && $qid !== '';
+		$needGap = !$contact && $qid !== '' && !\Bitweaver\Contactwiki\WikimediaCache::hasEntity( $qid );
 		if( $contact ) {
 			$gContent = new ContactWikiIndividual( null, $contact['content_id'] );
 			$gContent->load();

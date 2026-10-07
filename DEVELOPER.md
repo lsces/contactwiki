@@ -359,6 +359,20 @@ stepped past. Linking sets `xref`/`xkey` on every season row and the program row
 across. There is no minimum-episodes control: everyone the season directories hold is listed. Linked names are reused, so a person
 resolved on one show arrives already linked on the next.
 
+#### Creating contacts quickly: the Wikimedia prefetch
+
+A contact made from a Wikidata item needs three Wikimedia records - the entity, the English Wikipedia summary and the Commons photo - and
+fetched one after another (and the entity used to be fetched twice) they were ~68% of the ~2.2 s per contact, plus a 0.5 s pause between
+people. `ContactWikiTrait::prefetchWikidata()` fetches them for the whole batch before the create loop: the entities first, then every summary
+and photo together, with at most `WikimediaCache::CONCURRENCY` (5) requests in flight (`WikimediaCache::multiFetch()`, cURL multi, HTTP/2).
+They go into `WikimediaCache` (per request; photos as temp files removed at shutdown), and `fetchWikidataEntity()`, `fetchWikipediaSummary()` and
+`downloadCommonsFile()` read it first - so `createFromWikidata()`/`reloadFromWikidata()` are unchanged, find everything ready, and the duplicate entity
+fetch is gone. Only successes are cached; whatever the prefetch could not get is fetched the old sequential way with its own 429/503 retry, and the
+inter-person pause is only taken before a person whose data was not prefetched. Without the cURL extension `multiFetch()` returns nothing and
+everything is fetched sequentially as before. Measured on desktop (NCIS): a batch of 20 (15 Wikidata, 5 TMDb-only) creates in 6.2 s (3.1 s of it the
+parallel fetch) against 35.8 s for 16 all-Wikidata contacts sequentially. The profile that led here: of 15.3 s for 8 contacts, 10.4 s network,
+~3.5 s pauses, only ~1.3 s our own database work - so no change was made to xref writes.
+
 ### Artists pass - `load_wiki_artists.php`
 
 Surveys every top-level Music gallery for a linked contact (`music_gallery`), and for the gap set

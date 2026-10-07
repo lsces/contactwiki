@@ -1057,6 +1057,11 @@ trait ContactWikiTrait {
 	}
 
 	public static function fetchWikidataEntity( string $pQid ): ?array {
+		// Read the per-request cache first (prefetchWikidata(), or an earlier fetch of the same entity -
+		// createFromWikidata() and reloadFromWikidata() both need it).
+		if( WikimediaCache::hasEntity( $pQid ) ) {
+			return WikimediaCache::getEntity( $pQid );
+		}
 		$context = stream_context_create( [ 'http' => [
 			'header'  => self::userAgentHeader(),
 			'timeout' => 15,
@@ -1066,7 +1071,69 @@ trait ContactWikiTrait {
 			return null;
 		}
 		$data = json_decode( $json, true );
-		return $data['entities'][$pQid] ?? null;
+		$entity = $data['entities'][$pQid] ?? null;
+		if( $entity ) {
+			WikimediaCache::putEntity( $pQid, $entity );
+		}
+		return $entity;
+	}
+
+	/**
+	 * Fetch, concurrently, everything creating contacts for these Wikidata items will want - their entities first,
+	 * then each one's English Wikipedia summary and Commons photo together - into WikimediaCache, so the normal
+	 * create path (fetchWikidataEntity()/fetchWikipediaSummary()/downloadCommonsFile()) finds it all ready instead of
+	 * fetching one request at a time. At most WikimediaCache::CONCURRENCY requests are in flight. Anything that
+	 * fails is just not cached, and the normal path fetches it the old way.
+	 *
+	 * @param list<string> $pQids
+	 * @return array{entities:int, summaries:int, images:int, seconds:float}  what was fetched
+	 */
+	public static function prefetchWikidata( array $pQids ): array {
+		$started = microtime( true );
+		$stats = [ 'entities' => 0, 'summaries' => 0, 'images' => 0, 'seconds' => 0.0 ];
+		$userAgent = trim( preg_replace( '/^User-Agent:\s*/i', '', self::userAgentHeader() ) );
+		$qids = array_values( array_unique( array_filter( $pQids, fn( $q ) => preg_match( '/^Q\d+$/', (string)$q ) && !WikimediaCache::hasEntity( $q ) ) ) );
+
+		$requests = [];
+		foreach( $qids as $qid ) {
+			$requests[$qid] = "https://www.wikidata.org/wiki/Special:EntityData/$qid.json";
+		}
+		foreach( WikimediaCache::multiFetch( $requests, $userAgent ) as $qid => $result ) {
+			$entity = $result['status'] === 200 ? ( json_decode( (string)$result['body'], true )['entities'][$qid] ?? null ) : null;
+			if( $entity ) {
+				WikimediaCache::putEntity( $qid, $entity );
+				$stats['entities']++;
+			}
+		}
+
+		// The summary and the photo of every entity in hand (including ones cached earlier in the request), together.
+		$requests = [];
+		foreach( array_values( array_unique( array_filter( $pQids, fn( $q ) => WikimediaCache::hasEntity( (string)$q ) ) ) ) as $qid ) {
+			$entity = WikimediaCache::getEntity( $qid );
+			if( ( $title = self::wikipediaTitle( $entity ) ) !== null && WikimediaCache::getSummary( $title ) === null ) {
+				$requests['s:'.$title] = 'https://en.wikipedia.org/api/rest_v1/page/summary/'.rawurlencode( $title );
+			}
+			if( ( $file = self::imageFilename( $entity ) ) !== null && WikimediaCache::getImage( $file ) === null ) {
+				$requests['i:'.$file] = 'https://commons.wikimedia.org/wiki/Special:FilePath/'.rawurlencode( $file );
+			}
+		}
+		foreach( WikimediaCache::multiFetch( $requests, $userAgent, WikimediaCache::CONCURRENCY, 25 ) as $key => $result ) {
+			if( $result['status'] !== 200 || $result['body'] === null || $result['body'] === '' ) {
+				continue;
+			}
+			if( $key[0] === 's' ) {
+				$extract = trim( (string)( json_decode( $result['body'], true )['extract'] ?? '' ) );
+				if( $extract !== '' ) {
+					WikimediaCache::putSummary( substr( $key, 2 ), $extract );
+					$stats['summaries']++;
+				}
+			} else {
+				WikimediaCache::putImage( substr( $key, 2 ), $result['body'] );
+				$stats['images']++;
+			}
+		}
+		$stats['seconds'] = round( microtime( true ) - $started, 1 );
+		return $stats;
 	}
 
 	/**
@@ -1086,6 +1153,9 @@ trait ContactWikiTrait {
 	 * source.
 	 */
 	public static function fetchWikipediaSummary( string $pTitle ): ?string {
+		if( ( $cached = WikimediaCache::getSummary( $pTitle ) ) !== null ) {
+			return $cached;
+		}
 		$context = stream_context_create( [ 'http' => [
 			'header'  => self::userAgentHeader(),
 			'timeout' => 15,
@@ -1096,6 +1166,9 @@ trait ContactWikiTrait {
 		}
 		$data = json_decode( $json, true );
 		$extract = trim( (string)( $data['extract'] ?? '' ) );
+		if( $extract !== '' ) {
+			WikimediaCache::putSummary( $pTitle, $extract );
+		}
 		return $extract !== '' ? $extract : null;
 	}
 
@@ -1294,6 +1367,9 @@ trait ContactWikiTrait {
 	// stored locally (see getExtraImagePath()), never hotlinked - same reasoning as every other
 	// externally-sourced image already saved locally elsewhere in this stack.
 	public static function downloadCommonsFile( string $pFilename, string $pDestPath ): bool {
+		if( ( $cached = WikimediaCache::getImage( $pFilename ) ) !== null ) {
+			return copy( $cached, $pDestPath );
+		}
 		$context = stream_context_create( [ 'http' => [
 			'header'  => self::userAgentHeader(),
 			'timeout' => 20,
