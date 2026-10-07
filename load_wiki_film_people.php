@@ -12,7 +12,7 @@
  *   - a name matching more than one                                  -> choose which, then link
  *
  * Stage 2, only when asked ("Look up next batch"), for the most-credited people still without a
- * contact, LOOKUP_BATCH (40) at a time:
+ * contact, LOOKUP_BATCH (100) at a time:
  *   - TMDb: the credits of the films the person appears in (their own `tmdb` ids) give the person's
  *     TMDb id; several ids = two people of that name, choose;
  *   - Wikidata: P4985 (TMDb person id) gives the Q-id - one SPARQL query for the batch; TMDb's own
@@ -51,7 +51,7 @@ $gBitSystem->verifyPermission( 'p_contact_update' );
 const LOAD_WIKI_FILM_PEOPLE_BATCH = 100;
 // People looked up (TMDb credits, Wikidata, contact creation) per submit - each is several network
 // round trips, so a long list is done in small batches with a gap between creations, as the music pass does.
-const LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH = 40;
+const LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH = 100;
 const LOAD_WIKI_FILM_PEOPLE_GAP_US = 500000;
 // Wall-clock budget for one submit's creations. Production nginx cuts a request after 60s without a response, so a
 // run stops starting new people at this point and reports how many are left (they stay ticked for the next press).
