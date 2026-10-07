@@ -12,7 +12,7 @@
  *   - a name matching more than one                                  -> choose which, then link
  *
  * Stage 2, only when asked ("Look up next batch"), for the most-credited people still without a
- * contact, LOOKUP_BATCH at a time:
+ * contact, LOOKUP_BATCH (20) at a time:
  *   - TMDb: the credits of the films the person appears in (their own `tmdb` ids) give the person's
  *     TMDb id; several ids = two people of that name, choose;
  *   - Wikidata: P4985 (TMDb person id) gives the Q-id - one SPARQL query for the batch; TMDb's own
@@ -50,7 +50,7 @@ $gBitSystem->verifyPermission( 'p_contact_update' );
 const LOAD_WIKI_FILM_PEOPLE_BATCH = 100;
 // People looked up (TMDb credits, Wikidata, contact creation) per submit - each is several network
 // round trips, so a long list is done in small batches with a gap between creations, as the music pass does.
-const LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH = 10;
+const LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH = 20;
 const LOAD_WIKI_FILM_PEOPLE_GAP_US = 500000;
 // Wall-clock budget for one submit's creations. Production nginx cuts a request after 60s without a response, so a
 // run stops starting new people at this point and reports how many are left (they stay ticked for the next press).
@@ -182,6 +182,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 	$survey = $surveyFn();
 	$picks = (array)( $_REQUEST['pick'] ?? [] );
 	$attempted = 0;
+	$needGap = false;
 	foreach( array_slice( array_map( 'strval', (array)( $_REQUEST['selected2'] ?? [] ) ), 0, LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH ) as $key ) {
 		$person = $survey['people'][$key] ?? null;
 		// "<tmdb person id>:<Q-id or empty>" - both re-validated, the form is not trusted.
@@ -194,13 +195,16 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			$createResult['remaining']++;
 			continue;
 		}
-		if( $attempted++ ) {
+		$attempted++;
+		// The pause is for Wikimedia's rate limits - only after a creation that actually called it.
+		if( $needGap ) {
 			usleep( LOAD_WIKI_FILM_PEOPLE_GAP_US );
 		}
 		$personStarted = microtime( true );
 		$contact = ContactWikiIndividual::findContactByTmdbId( (string)$tmdbId )
 			?: ( $qid !== '' ? ContactWikiIndividual::findContactByWikidataQid( $qid ) : null );
 		$wasCreated = false;
+		$needGap = !$contact && $qid !== '';
 		if( $contact ) {
 			$gContent = new ContactWikiIndividual( null, $contact['content_id'] );
 			$gContent->load();
