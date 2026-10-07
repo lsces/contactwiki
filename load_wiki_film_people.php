@@ -228,6 +228,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 	$createResult = [ 'created' => [], 'linked' => [], 'errors' => [], 'rows' => 0, 'remaining' => 0, 'seconds' => 0,
 		'kinds' => [ 'wikidata' => 0, 'tmdb' => 0, 'nameonly' => 0, 'existing' => 0 ] ];
 	$createStarted = microtime( true );
+	ContactWikiIndividual::$skipPhotos = empty( $_REQUEST['photos'] );
 	$survey = $surveyFn();
 	$picks = (array)( $_REQUEST['pick'] ?? [] );
 	$attempted = 0;

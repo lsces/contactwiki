@@ -95,6 +95,9 @@ trait ContactWikiTrait {
 	 */
 	abstract protected function biographyDateProps(): array;
 
+	/** @var bool a bulk pass can leave photos out: none is fetched, and one the prefetch did not already hold is skipped (a contact's own Reload from Wikidata loads it later). */
+	public static bool $skipPhotos = false;
+
 	/** @var array<string,float> seconds spent per step of a contact build, summed over the request (shown on the people pass). */
 	public static array $stepTimings = [];
 
@@ -215,6 +218,9 @@ trait ContactWikiTrait {
 
 		$t = self::stepDone( 'dates', $t );
 		$imageFilename = self::imageFilename( $entity );
+		if( $imageFilename && self::$skipPhotos && WikimediaCache::getImage( $imageFilename ) === null ) {
+			$imageFilename = null;
+		}
 		if( $imageFilename ) {
 			$imagesDir = $this->getExtraImagePath( '' );
 			$ext = strtolower( pathinfo( $imageFilename, PATHINFO_EXTENSION ) ) ?: 'jpg';
@@ -1393,7 +1399,7 @@ trait ContactWikiTrait {
 			if( ( $title = self::wikipediaTitle( $entity ) ) !== null && WikimediaCache::getSummary( $title ) === null ) {
 				$requests['s:'.$title] = 'https://en.wikipedia.org/api/rest_v1/page/summary/'.rawurlencode( $title );
 			}
-			if( ( $file = self::imageFilename( $entity ) ) !== null && WikimediaCache::getImage( $file ) === null ) {
+			if( !self::$skipPhotos && ( $file = self::imageFilename( $entity ) ) !== null && WikimediaCache::getImage( $file ) === null ) {
 				$requests['i:'.$file] = self::commonsPhotoUrl( $file );
 			}
 		}

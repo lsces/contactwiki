@@ -211,6 +211,7 @@
 						{foreach from=$lookup.people item=person}<input type="hidden" name="batch[]" value="{$person.key|escape}" />{/foreach}
 						<p>{$lookup.people|@count} {tr}looked up{/tr}{if $lookup.remaining}, {$lookup.remaining} {tr}more after these{/tr}{/if}:&nbsp;
 							<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create / Link Selected{/tr}" />
+							<label class="checkbox-inline" title="{tr}Wikimedia refuses bulk photo downloads for a while after a few big batches; without photos a batch makes more contacts per press, and a contact's photo can be loaded later from its own page.{/tr}"><input type="checkbox" name="photos" value="1" /> {tr}Fetch photos too{/tr}</label>
 							<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?fResolve=1&amp;start={$start+$lookup.people|@count}{foreach from=$hiddenFields key=k item=v}&amp;{$k}={$v|escape:'url'}{/foreach}">{tr}Skip these{/tr}</a></p>
 						<table class="table table-condensed">
 							<thead>
