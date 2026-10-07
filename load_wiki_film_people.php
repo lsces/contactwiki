@@ -177,7 +177,8 @@ if( !empty( $_REQUEST['fLink'] ) ) {
 
 // ---- Stage 2 write: create (or find) the contact for each ticked person and link their credits.
 if( !empty( $_REQUEST['fCreate'] ) ) {
-	$createResult = [ 'created' => [], 'linked' => [], 'errors' => [], 'rows' => 0, 'remaining' => 0, 'seconds' => 0 ];
+	$createResult = [ 'created' => [], 'linked' => [], 'errors' => [], 'rows' => 0, 'remaining' => 0, 'seconds' => 0,
+		'kinds' => [ 'wikidata' => 0, 'tmdb' => 0, 'existing' => 0 ] ];
 	$createStarted = microtime( true );
 	$survey = $surveyFn();
 	$picks = (array)( $_REQUEST['pick'] ?? [] );
@@ -244,6 +245,8 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		$entry = [ 'name' => $person['name'], 'title' => $gContent->getTitle(), 'rows' => $rows, 'view_url' => $gContent->getDisplayUrl(),
 			'seconds' => round( microtime( true ) - $personStarted, 1 ) ];
 		$createResult[$wasCreated ? 'created' : 'linked'][] = $entry;
+		// What it took: a Wikidata item (the slow, three-record kind), TMDb alone (a fraction of a second), or no creation at all.
+		$createResult['kinds'][!$wasCreated ? 'existing' : ( $qid !== '' ? 'wikidata' : 'tmdb' )]++;
 	}
 }
 
