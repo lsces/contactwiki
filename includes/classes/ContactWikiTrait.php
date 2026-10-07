@@ -122,7 +122,7 @@ trait ContactWikiTrait {
 	 * @param string|null $pQid
 	 * @return array
 	 */
-	public function reloadFromWikidata( ?string $pQid = null ): array {
+	public function reloadFromWikidata( ?string $pQid = null, bool $pBiographyStored = false ): array {
 		$qid = $pQid ?: $this->getWikidataQid();
 		if( !$qid && ( $mbid = $this->getMusicBrainzId() ) ) {
 			// A contact created from MusicBrainz alone: Wikidata may have gained an item for it since -
@@ -194,7 +194,7 @@ trait ContactWikiTrait {
 		// just as much as a person's (confirmed live against Fleetwood Mac), unlike TMDb's own
 		// biography field, which is person-only and no longer used as a bio source here at all (see
 		// fetchTmdbBiography()'s own docblock for why it's kept, just not called from here).
-		$wikiTitle = self::wikipediaTitle( $entity );
+		$wikiTitle = $pBiographyStored ? null : self::wikipediaTitle( $entity );
 		if( $wikiTitle !== null ) {
 			$bio = self::fetchWikipediaSummary( $wikiTitle );
 			if( $bio !== null ) {
@@ -1014,12 +1014,19 @@ trait ContactWikiTrait {
 		// Two Wikidata classes can map to the same code (orchestra + symphony orchestra -> WB02) -
 		// store each code once.
 		$storeHash['contact_types'] = array_values( array_unique( $storeHash['contact_types'] ) );
+		// The Wikipedia text goes in with the contact's first save, rather than a second full save of the contact afterwards.
 		$t = microtime( true );
+		$wikiTitle = self::wikipediaTitle( $entity );
+		$bio = $wikiTitle !== null ? self::fetchWikipediaSummary( $wikiTitle ) : null;
+		if( $bio !== null ) {
+			$storeHash['edit'] = self::plainTextToHtmlParagraphs( $bio );
+		}
+		$t = self::stepDone( 'biography', $t );
 		if( !$gContent->store( $storeHash ) ) {
 			return [ 'error' => implode( '; ', $gContent->mErrors ) ];
 		}
 		self::stepDone( 'contact store', $t );
-		$gContent->reloadFromWikidata( $pQid );
+		$gContent->reloadFromWikidata( $pQid, $bio !== null );
 		return [ 'content' => $gContent ];
 	}
 
