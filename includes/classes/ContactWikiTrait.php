@@ -1398,7 +1398,17 @@ trait ContactWikiTrait {
 			}
 		}
 		$stats['wanted'] += count( $requests );
-		foreach( WikimediaCache::multiFetch( $requests, $userAgent, WikimediaCache::CONCURRENCY, 25 ) as $key => $result ) {
+		$results = WikimediaCache::multiFetch( $requests, $userAgent, WikimediaCache::CONCURRENCY, 25 );
+		// Wikimedia answers a burst with HTTP 429 for some of the requests: ask again for just those, after a pause and two at a time,
+		// rather than leave each to be fetched one by one (and slower) while the contact is built.
+		$throttled = array_keys( array_filter( $results, fn( $r ) => in_array( $r['status'], [ 429, 503 ], true ) ) );
+		if( $throttled ) {
+			$stats['retried'] = count( $throttled );
+			sleep( 2 );
+			$retry = WikimediaCache::multiFetch( array_intersect_key( $requests, array_flip( $throttled ) ), $userAgent, 2, 25 );
+			$results = $retry + $results;
+		}
+		foreach( $results as $key => $result ) {
 			if( $result['status'] !== 200 || $result['body'] === null || $result['body'] === '' ) {
 				$stats['refused'][$result['status']] = ( $stats['refused'][$result['status']] ?? 0 ) + 1;
 				continue;
