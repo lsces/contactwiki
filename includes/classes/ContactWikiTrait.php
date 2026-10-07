@@ -428,6 +428,12 @@ trait ContactWikiTrait {
 			if( $data === null ) {
 				return null;
 			}
+			// A show's creator (Gene Roddenberry on Andromeda) is on the show record's created_by, not in its credits - and
+			// Plex credits them as a writer, so they count as one.
+			$show = self::tmdbGet( "/tv/$pTvId" );
+			foreach( $show['created_by'] ?? [] as $creator ) {
+				$data['crew'][] = [ 'id' => $creator['id'] ?? null, 'name' => $creator['name'] ?? null, 'department' => 'Writing', 'jobs' => [ [ 'job' => 'Creator' ] ] ];
+			}
 			$cache[$pTvId] = self::tmdbCreditsByName( $data );
 		}
 		return $cache[$pTvId];

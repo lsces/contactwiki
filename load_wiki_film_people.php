@@ -413,6 +413,8 @@ $gBitSmarty->assign( 'counts', $counts );
 $gBitSmarty->assign( 'reviewList', array_slice( $reviewList, 0, LOAD_WIKI_FILM_PEOPLE_BATCH ) );
 $gBitSmarty->assign( 'reviewTotal', count( $reviewList ) );
 $gBitSmarty->assign( 'unmatchedShown', array_slice( $unmatchedAll, $start, 30 ) );
+// Everyone still without a contact, wherever the lookup offset is: a person stepped past (not found on TMDb, skipped) must stay visible.
+$gBitSmarty->assign( 'unmatchedEveryone', array_slice( $unmatchedAll, 0, 200 ) );
 $gBitSmarty->assign( 'start', $start );
 $gBitSmarty->assign( 'lookupBatch', LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH );
 $gBitSmarty->assign( 'lookup', $lookup );

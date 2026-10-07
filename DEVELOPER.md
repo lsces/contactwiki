@@ -354,6 +354,9 @@ existing contact, create from Wikidata or TMDb, link). TMDb candidates are first
 holds several records for one person (the same writer under two ids): within one show, the same name doing the same job is **one
 person** - the record with a Wikidata item (else the lowest id) is used, the others are kept as **aliases** on the contact's `tmdb` xref
 (`data` = `{"also":["123"]}`, `addTmdbAliases()`, found again by `findContactByTmdbId()`); two different Wikidata items stay a choice.
+A show's **creator** (Gene Roddenberry on Andromeda) is on the TMDb show record's `created_by`, not in its aggregate credits, so `fetchTmdbTvCredits()` adds the
+creators (one extra `/tv/{id}` call) as writers - Plex credits them as such. The page always lists **everyone still without a contact** (up to 200) under the lookup,
+with a "Look them all up again from the top" button, because people are stepped past (not on TMDb, skipped) by the lookup offset and would otherwise vanish from view.
 People left unticked stay at the top of the list until decided or skipped; only people with nothing to act on (not found on TMDb) are
 stepped past. Linking sets `xref`/`xkey` on every season row and the program row for that name; a later season reload carries the link
 across. There is no minimum-episodes control: everyone the season directories hold is listed. Linked names are reused, so a person

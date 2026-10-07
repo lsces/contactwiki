@@ -246,7 +246,24 @@
 						<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create / Link Selected{/tr}" />
 					{/form}
 				{else}
-					<p>{tr}Nobody left to look up.{/tr}</p>
+					<p>{tr}Nobody left to look up from here.{/tr}{if $counts.unmatched} {$counts.unmatched} {tr}people still have no contact - they are listed below.{/tr}{/if}</p>
+				{/if}
+				{if $counts.unmatched}
+					<h3>{tr}Everyone still without a contact{/tr} ({$counts.unmatched})</h3>
+					<p><a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?fResolve=1&amp;start=0{foreach from=$hiddenFields key=k item=v}&amp;{$k}={$v|escape:'url'}{/foreach}">{tr}Look them all up again from the top{/tr}</a>
+						<span class="text-muted">{tr}People are stepped past when they cannot be found on TMDb or are skipped; they stay listed here.{/tr}</span></p>
+					<table class="table table-condensed">
+						<thead><tr><th>{tr}Credited as{/tr}</th><th>{if $scope == 'tv'}{tr}Episodes{/tr}{else}{tr}Credits{/tr}{/if}</th><th>{if $scope == 'tv'}{tr}Seasons{/tr}{else}{tr}Films{/tr}{/if}</th></tr></thead>
+						<tbody>
+							{foreach from=$unmatchedEveryone item=person}
+								<tr>
+									<td>{$person.name|escape}</td>
+									<td>{if $scope == 'tv' && $person.episodes}{$person.episodes} {tr}episodes{/tr}{else}{$person.credits}{/if} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
+									<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
+								</tr>
+							{/foreach}
+						</tbody>
+					</table>
 				{/if}
 			{/if}
 		{/if}
