@@ -598,6 +598,96 @@ trait ContactWikiTrait {
 	 * @param string[] $pRoles  the person's credit roles (director/writer/star/creator)
 	 * @return list<array{qid:string, label:string, description:string, fit:bool, likely:bool}>
 	 */
+	/**
+	 * The Wikidata item(s) of a TV series, found through its TMDb TV id (P4983) or IMDb id (P345). A show can have more than one (Doctor Who has
+	 * one for the franchise and one for 1963-1989). Empty if Wikidata has none or cannot be asked.
+	 *
+	 * @return list<string>  Q-ids
+	 */
+	public static function wikidataSeriesItems( ?int $pTmdbTvId, ?string $pImdbId ): array {
+		$parts = [];
+		if( $pTmdbTvId ) {
+			$parts[] = '{ ?s wdt:P4983 "'.(int)$pTmdbTvId.'" }';
+		}
+		if( $pImdbId && preg_match( '/^tt\d+$/', $pImdbId ) ) {
+			$parts[] = '{ ?s wdt:P345 "'.$pImdbId.'" }';
+		}
+		if( !$parts ) {
+			return [];
+		}
+		$rows = self::wikidataSparql( 'SELECT DISTINCT ?s WHERE { '.implode( ' UNION ', $parts ).' }' );
+		$qids = [];
+		foreach( $rows ?? [] as $row ) {
+			if( preg_match( '#/(Q\d+)$#', $row['s']['value'] ?? '', $m ) ) {
+				$qids[] = $m[1];
+			}
+		}
+		return array_values( array_unique( $qids ) );
+	}
+
+	/**
+	 * Every person Wikidata ties to a series - as a cast member, director, screenwriter, producer or creator of the series itself or of any of its
+	 * parts (episodes, serials, one level of sub-series) - indexed by normalised name (label and English aliases). For an older programme TMDb's
+	 * credits are thin while Wikidata is often well curated; a credited name that matches someone tied to THIS show is a far safer match than a bare
+	 * name search. One query per show per request.
+	 *
+	 * @param list<string> $pSeriesQids
+	 * @return array<string, list<array{qid:string, label:string, description:string}>>  normalised name => the people with that name
+	 */
+	public static function wikidataSeriesPeople( array $pSeriesQids ): array {
+		static $cache = [];
+		$qids = array_values( array_filter( array_unique( $pSeriesQids ), fn( $q ) => preg_match( '/^Q\d+$/', (string)$q ) ) );
+		sort( $qids );
+		$key = implode( ',', $qids );
+		if( !$qids ) {
+			return [];
+		}
+		if( !isset( $cache[$key] ) ) {
+			$values = implode( ' ', array_map( fn( $q ) => "wd:$q", $qids ) );
+			$rows = self::wikidataSparql( 'SELECT DISTINCT ?person ?personLabel ?personDescription ?alias WHERE {
+				VALUES ?series { '.$values.' }
+				{ ?series wdt:P161|wdt:P57|wdt:P58|wdt:P162|wdt:P170 ?person }
+				UNION { ?w wdt:P179 ?series . ?w wdt:P161|wdt:P57|wdt:P58|wdt:P162 ?person }
+				UNION { ?w wdt:P179 ?sub . ?sub wdt:P179 ?series . ?w wdt:P161|wdt:P57|wdt:P58 ?person }
+				?person wdt:P31 wd:Q5 .
+				OPTIONAL { ?person skos:altLabel ?alias . FILTER( LANG( ?alias ) = "en" ) }
+				SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 40000' );
+			$people = [];
+			foreach( $rows ?? [] as $row ) {
+				if( !preg_match( '#/(Q\d+)$#', $row['person']['value'] ?? '', $m ) ) {
+					continue;
+				}
+				$people[$m[1]] ??= [ 'qid' => $m[1], 'label' => $row['personLabel']['value'] ?? $m[1], 'description' => $row['personDescription']['value'] ?? '', 'names' => [] ];
+				$people[$m[1]]['names'][self::normaliseName( $row['personLabel']['value'] ?? '' )] = true;
+				if( !empty( $row['alias']['value'] ) ) {
+					$people[$m[1]]['names'][self::normaliseName( $row['alias']['value'] )] = true;
+				}
+			}
+			$index = [];
+			foreach( $people as $person ) {
+				foreach( array_keys( $person['names'] ) as $name ) {
+					if( $name !== '' ) {
+						$index[$name][$person['qid']] = [ 'qid' => $person['qid'], 'label' => $person['label'], 'description' => $person['description'] ];
+					}
+				}
+			}
+			$cache[$key] = array_map( 'array_values', $index );
+		}
+		return $cache[$key];
+	}
+
+	/** One SPARQL query against Wikidata's endpoint; the bindings, or null if it cannot be asked. */
+	private static function wikidataSparql( string $pQuery ): ?array {
+		$context = stream_context_create( [ 'http' => [
+			'method'  => 'POST',
+			'header'  => self::userAgentHeader()."Accept: application/sparql-results+json\r\nContent-Type: application/x-www-form-urlencoded\r\n",
+			'content' => http_build_query( [ 'query' => $pQuery ] ),
+			'timeout' => 60,
+		] ] );
+		$json = self::fetchExternal( 'https://query.wikidata.org/sparql', $context );
+		return $json === false ? null : ( json_decode( $json, true )['results']['bindings'] ?? [] );
+	}
+
 	/** Does a Wikidata item's description fit one of the credited jobs (director/writer/star/creator)? */
 	public static function descriptionFitsRoles( string $pDescription, array $pRoles ): bool {
 		$patterns = [ 'director' => '/director/i', 'writer' => '/writer|screenwriter|dramatist|playwright|novelist|author/i',

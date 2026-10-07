@@ -354,6 +354,12 @@ existing contact, create from Wikidata or TMDb, link). TMDb candidates are first
 holds several records for one person (the same writer under two ids): within one show, the same name doing the same job is **one
 person** - the record with a Wikidata item (else the lowest id) is used, the others are kept as **aliases** on the contact's `tmdb` xref
 (`data` = `{"also":["123"]}`, `addTmdbAliases()`, found again by `findContactByTmdbId()`); two different Wikidata items stay a choice.
+**Older programmes: the show's own Wikidata cast.** TMDb's credits are thin for older TV (Plex's people come from TheTVDB, which the community has tidied): classic Doctor Who had 141 of 143 unlinked
+people unresolved. Before a person falls to the name search, `wikidataSeriesItems()` finds the show's Wikidata item(s) by its TMDb TV id (P4983) or IMDb id (P345) - Doctor Who has two - and
+`wikidataSeriesPeople()` asks Wikidata once (SPARQL, ~1 s) for every human tied to the series or its parts as cast member, director, screenwriter, producer or creator (P161/P57/P58/P162/P170 on the series,
+on items `part of the series` (P179) and one sub-series level), indexed by normalised label and English aliases. A credited name that matches someone tied to THIS show is offered pre-ticked (pick `0:Q...`,
+labelled "in this show's Wikidata cast"); two people of one name tied to the show stay a choice. Doctor Who: 98 of the 141 resolved this way (1,337 people tied to the show). Whatever is left falls through to:
+
 **People Plex tags but TMDb lacks** (Pat Williams, Ted Mann on Andromeda: TMDb's crew list is incomplete) are "not resolved", but are no longer a dead end: `searchWikidataByName()`
 (Wikidata `wbsearchentities`, exact label/alias match, disambiguation pages dropped, up to 12 searches per page) lists candidate items with their descriptions (a screen/writing-job description is
 ticked as 'likely'), and each person also has "a contact from the name only" (`createNameOnly()`, tagged WP01/WP02/WP07 from the credit roles). Nothing is created until the person is

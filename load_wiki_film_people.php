@@ -358,6 +358,7 @@ if( $resolve ) {
 	$wikidataErrorReason = $wikidataError ? ContactWikiIndividual::getLastFetchError() : null;
 	$wikidata ??= [];
 
+	$seriesIndex = null;
 	foreach( $batch as &$person ) {
 		$person['options'] = [];
 		foreach( $person['found']['ids'] as $tmdbId ) {
@@ -411,6 +412,22 @@ if( $resolve ) {
 				$person['options'] = [ $primary ];
 			}
 		}
+		// Not in TMDb's credits: for a TV show try the people Wikidata itself ties to the show (as cast, director, writer, producer or creator of the series
+		// or its episodes) - older programmes are thin on TMDb but often well curated on Wikidata, and a name that matches someone tied to THIS show is a
+		// far safer match than a bare name search. One Wikidata query per show per request.
+		if( !$person['options'] && $scope === 'tv' ) {
+			$seriesIndex ??= ContactWikiIndividual::wikidataSeriesPeople(
+				ContactWikiIndividual::wikidataSeriesItems( FisheyeCredits::tmdbIdFor( $programId ), FisheyeCredits::imdbIdFor( $programId ) ) );
+			foreach( $seriesIndex[ContactWikiIndividual::normaliseName( $person['name'] )] ?? [] as $match ) {
+				$existing = ContactWikiIndividual::findContactByWikidataQid( $match['qid'] );
+				if( $existing ) {
+					$existing['view_url'] = CONTACTWIKI_PKG_URL.'view.php?content_id='.$existing['content_id'];
+				}
+				$person['options'][] = [ 'tmdb_id' => 0, 'tmdb_name' => '', 'qid' => $match['qid'], 'label' => $match['label'], 'description' => $match['description'],
+					'fit' => ContactWikiIndividual::descriptionFitsRoles( $match['description'], array_keys( $person['roles'] ) ),
+					'is_human' => true, 'from_tmdb' => false, 'from_series' => true, 'details' => null, 'existing' => $existing, 'value' => '0:'.$match['qid'] ];
+			}
+		}
 		if( !$person['options'] ) {
 			// Tagged in Plex but TMDb has no record: offer Wikidata items of that exact name (a person decides - none is pre-selected as a
 			// pick) and a contact from the name alone. Searches are capped per request so a show with many such people stays quick.
@@ -425,7 +442,7 @@ if( $resolve ) {
 			$person['reason'] = !$tokenSet ? KernelTools::tra( 'No TMDb access token is set.' )
 				: ( !$person['tmdb_films'] ? ( $scope === 'tv' ? KernelTools::tra( 'This show has no TMDb id.' ) : KernelTools::tra( 'None of its films carries a TMDb id.' ) )
 				: ( $person['found']['error'] ? KernelTools::tra( 'TMDb lookup failed' ).': '.$person['found']['error']
-				: KernelTools::tra( 'Not found in the TMDb credits of its films under this name.' ) ) );
+				: ( $scope === 'tv' ? KernelTools::tra( 'Not in TMDb\'s credits for this show, nor in the show\'s Wikidata cast, under this name.' ) : KernelTools::tra( 'Not found in the TMDb credits of its films under this name.' ) ) ) );
 		} elseif( count( $person['options'] ) > 1 ) {
 			$person['status'] = 'choose';
 		} elseif( $person['options'][0]['existing'] ) {

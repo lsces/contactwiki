@@ -240,7 +240,7 @@
 													{else}
 														{tr}Create from TMDb{/tr} <span class="text-muted">({tr}no Wikidata item{/tr}){if $o.details}: {$o.details.known_for|escape}{if $o.details.birthday}, {tr}born{/tr} {$o.details.birthday|escape}{/if}{/if}</span>
 													{/if}
-													<a class="small text-muted" href="https://www.themoviedb.org/person/{$o.tmdb_id}" target="_blank" rel="noopener">TMDb {$o.tmdb_id}</a>
+													{if $o.tmdb_id}<a class="small text-muted" href="https://www.themoviedb.org/person/{$o.tmdb_id}" target="_blank" rel="noopener">TMDb {$o.tmdb_id}</a>{/if}{if $o.from_series} <span class="small text-success">({tr}in this show's Wikidata cast{/tr})</span>{/if}
 													{if $o.aliases}<span class="small text-muted">({tr}same person, also{/tr} {foreach from=$o.aliases item=a name=al}<a href="https://www.themoviedb.org/person/{$a}" target="_blank" rel="noopener">TMDb {$a}</a>{if !$smarty.foreach.al.last}, {/if}{/foreach})</span>{/if}
 													{if $person.status == 'choose'}</label>{/if}
 												{/foreach}
