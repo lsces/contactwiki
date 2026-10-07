@@ -33,6 +33,7 @@
 
 namespace Bitweaver\Contactwiki;
 
+use Bitweaver\Fisheye\FisheyeGallery;
 use Bitweaver\Fisheyemedia\FisheyeCredits;
 use Bitweaver\Fisheyemedia\FisheyeFilm;
 use Bitweaver\Fisheyemedia\FisheyeSeason;
@@ -110,7 +111,30 @@ $resolve = !empty( $_REQUEST['fResolve'] ) || !empty( $_REQUEST['fCreate'] );
 // ---- TV: reload the seasons' episodes from Plex (full cast per episode), which rebuilds each credit directory.
 // Each season is dozens of Plex calls and thumbnail fetches, so a few seasons per submit with a Continue.
 if( $scope === 'tv' && !empty( $_REQUEST['fReload'] ) ) {
-	$reloadResult = [ 'seasons' => [], 'episodes' => 0, 'next' => null, 'total' => count( $seasonIds ) ];
+	$reloadResult = [ 'seasons' => [], 'episodes' => 0, 'next' => null, 'total' => count( $seasonIds ), 'creators' => null ];
+	// The show's creators (TMDb's created_by - not in its credits) go onto the program as `creator` rows, once, on the first batch.
+	if( (int)( $_REQUEST['rl'] ?? 0 ) === 0 ) {
+		$reloadResult['creators'] = ( function() use ( $programId ) {
+			$tvId = FisheyeCredits::tmdbIdFor( $programId );
+			$creators = $tvId ? ContactWikiIndividual::fetchTmdbCreators( $tvId ) : null;
+			$program = FisheyeGallery::lookup( [ 'content_id' => $programId ] );
+			if( $creators === null || !$program || !$program->isValid() ) {
+				return [ 'names' => [], 'note' => !$tvId ? KernelTools::tra( 'This show has no TMDb id.' ) : ( ContactWikiIndividual::getLastFetchError() ?: '' ) ];
+			}
+			$known = $creators ? FisheyeCredits::linkedContactsByName( array_column( $creators, 'name' ) ) : [];
+			$wanted = [];
+			foreach( $creators as $i => $creator ) {
+				$row = [ 'key' => $creator['name'], 'xkey_ext' => $creator['name'], 'xorder' => $i + 1 ];
+				if( $link = ( $known[mb_strtolower( $creator['name'] )] ?? null ) ) {
+					$row['xref'] = $link['xref'];
+					$row['xkey'] = $link['xkey'];
+				}
+				$wanted[] = $row;
+			}
+			$program->reconcileXrefItem( 'creator', $wanted, 'xkey_ext', false, true );
+			return [ 'names' => array_column( $creators, 'name' ), 'note' => '' ];
+		} )();
+	}
 	$reloadStarted = microtime( true );
 	for( $i = max( 0, (int)( $_REQUEST['rl'] ?? 0 ) ); $i < count( $seasonIds ); $i++ ) {
 		if( microtime( true ) - $reloadStarted > 25 ) {
@@ -389,7 +413,7 @@ if( $resolve ) {
 			static $nameSearches = 0;
 			$person['manual'] = [];
 			if( $nameSearches++ < 12 ) {
-				foreach( ContactWikiIndividual::searchWikidataByName( $person['name'] ) as $candidate ) {
+				foreach( ContactWikiIndividual::searchWikidataByName( $person['name'], array_keys( $person['roles'] ) ) as $candidate ) {
 					$person['manual'][] = $candidate + [ 'value' => '0:'.$candidate['qid'] ];
 				}
 			}

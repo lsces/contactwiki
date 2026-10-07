@@ -70,6 +70,7 @@
 			{if $reloadResult}
 				<div class="alert alert-success">
 					<p>{$reloadResult.seasons|@count} {tr}seasons reloaded from Plex{/tr} ({$reloadResult.episodes} {tr}episodes{/tr}), {tr}credit directories rebuilt{/tr}:</p>
+					{if $reloadResult.creators}<p>{tr}Created by{/tr}: {if $reloadResult.creators.names}{$reloadResult.creators.names|@implode:', '|escape}{else}<span class="text-muted">{tr}none found on TMDb{/tr}{if $reloadResult.creators.note} ({$reloadResult.creators.note|escape}){/if}</span>{/if}</p>{/if}
 					<ul>{foreach from=$reloadResult.seasons item=rs}<li>{$rs.title|escape} - {if $rs.matched}{$rs.episodes} {tr}episodes{/tr}, {$rs.seconds}s{else}{tr}no Plex match, episodes re-read from disk{/tr}{/if}</li>{/foreach}</ul>
 					{if $reloadResult.next !== null}
 						{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
@@ -225,7 +226,7 @@
 												<br />{tr}Tick to create a contact for this person - choose which:{/tr}
 												{foreach from=$person.manual item=m name=man}
 													<br /><label><input type="radio" name="pick[{$person.key|escape}]" value="{$m.value|escape}" {if $smarty.foreach.man.first}checked="checked"{/if} />
-													{tr}Wikidata{/tr}: <a href="https://www.wikidata.org/wiki/{$m.qid|escape}" target="_blank" rel="noopener">{$m.label|escape} ({$m.qid|escape})</a>{if $m.description} - {$m.description|escape}{/if}{if $m.likely} <span class="text-success">&#10003;</span>{/if}</label>
+													{tr}Wikidata{/tr}: <a href="https://www.wikidata.org/wiki/{$m.qid|escape}" target="_blank" rel="noopener">{$m.label|escape} ({$m.qid|escape})</a>{if $m.description} - {$m.description|escape}{/if}{if $m.fit} <span class="text-success" title="{tr}the description fits the credited job{/tr}">&#10003;</span>{elseif $m.likely} <span class="text-muted">&#10003;</span>{/if}</label>
 												{/foreach}
 												<br /><label><input type="radio" name="pick[{$person.key|escape}]" value="0:" {if !$person.manual}checked="checked"{/if} /> {tr}A contact from the name only{/tr} <span class="text-muted">({tr}no Wikidata or TMDb id{/tr})</span></label>
 											{else}

@@ -375,6 +375,9 @@ trait ContactWikiTrait {
 			if( in_array( 'Director', $jobs, true ) ) {
 				$roles[] = 'director';
 			}
+			if( in_array( 'Creator', $jobs, true ) ) {
+				$roles[] = 'creator';
+			}
 			if( ( $person['department'] ?? '' ) === 'Writing' ) {
 				$roles[] = 'writer';
 			}
@@ -421,6 +424,34 @@ trait ContactWikiTrait {
 	 *
 	 * @return array<string, array<int, array{name:string, roles:string[]}>>|null  normalised name => [ tmdb person id => ... ]
 	 */
+	/** A TMDb TV show's own record (name, created_by, ...), cached per request. */
+	private static function tmdbShow( int $pTvId ): ?array {
+		static $cache = [];
+		if( !array_key_exists( $pTvId, $cache ) ) {
+			$cache[$pTvId] = self::tmdbGet( "/tv/$pTvId" );
+		}
+		return $cache[$pTvId];
+	}
+
+	/**
+	 * A TMDb TV show's creators (its created_by) - not in the show's credits, so the show page's "Created by" line comes from here.
+	 *
+	 * @return list<array{id:int, name:string}>|null  null when TMDb could not be asked
+	 */
+	public static function fetchTmdbCreators( int $pTvId ): ?array {
+		$show = self::tmdbShow( $pTvId );
+		if( $show === null ) {
+			return null;
+		}
+		$ret = [];
+		foreach( $show['created_by'] ?? [] as $creator ) {
+			if( !empty( $creator['id'] ) && !empty( $creator['name'] ) ) {
+				$ret[] = [ 'id' => (int)$creator['id'], 'name' => $creator['name'] ];
+			}
+		}
+		return $ret;
+	}
+
 	public static function fetchTmdbTvCredits( int $pTvId ): ?array {
 		static $cache = [];
 		if( !array_key_exists( $pTvId, $cache ) ) {
@@ -430,7 +461,7 @@ trait ContactWikiTrait {
 			}
 			// A show's creator (Gene Roddenberry on Andromeda) is on the show record's created_by, not in its credits - and
 			// Plex credits them as a writer, so they count as one.
-			$show = self::tmdbGet( "/tv/$pTvId" );
+			$show = self::tmdbShow( $pTvId );
 			foreach( $show['created_by'] ?? [] as $creator ) {
 				$data['crew'][] = [ 'id' => $creator['id'] ?? null, 'name' => $creator['name'] ?? null, 'department' => 'Writing', 'jobs' => [ [ 'job' => 'Creator' ] ] ];
 			}
@@ -559,11 +590,13 @@ trait ContactWikiTrait {
 	/**
 	 * Wikidata items whose label (or alias) is exactly this name - for a credited person TMDb has no record of (Plex tags them, TMDb's
 	 * crew list lacks them). Nothing here is trusted: the caller shows each candidate with its description for a person to pick, none
-	 * pre-selected. Disambiguation pages are dropped; a description that reads like a screen/writing job marks the candidate 'likely'.
+	 * pre-selected. Disambiguation pages are dropped; a description that fits one of the credited roles marks the candidate 'fit' (listed first), one that
+	 * reads like any screen/writing job 'likely'.
 	 *
-	 * @return list<array{qid:string, label:string, description:string, likely:bool}>
+	 * @param string[] $pRoles  the person's credit roles (director/writer/star/creator)
+	 * @return list<array{qid:string, label:string, description:string, fit:bool, likely:bool}>
 	 */
-	public static function searchWikidataByName( string $pName ): array {
+	public static function searchWikidataByName( string $pName, array $pRoles = [] ): array {
 		$context = stream_context_create( [ 'http' => [ 'header' => self::userAgentHeader(), 'timeout' => 15 ] ] );
 		$json = self::fetchExternal( 'https://www.wikidata.org/w/api.php?'.http_build_query( [
 			'action' => 'wbsearchentities', 'search' => $pName, 'language' => 'en', 'uselang' => 'en', 'type' => 'item', 'limit' => 8, 'format' => 'json' ] ), $context );
@@ -571,6 +604,8 @@ trait ContactWikiTrait {
 			return [];
 		}
 		$want = self::normaliseName( $pName );
+		$rolePatterns = [ 'director' => '/director/i', 'writer' => '/writer|screenwriter|dramatist|playwright|novelist|author/i',
+			'star' => '/actor|actress|performer|comedian|singer/i', 'creator' => '/creator|producer|writer|screenwriter|director/i' ];
 		$found = [];
 		foreach( json_decode( $json, true )['search'] ?? [] as $hit ) {
 			$description = (string)( $hit['description'] ?? '' );
@@ -579,10 +614,15 @@ trait ContactWikiTrait {
 			if( !$matched || empty( $hit['id'] ) || stripos( $description, 'disambiguation' ) !== false ) {
 				continue;
 			}
-			$found[] = [ 'qid' => $hit['id'], 'label' => (string)( $hit['label'] ?? $hit['id'] ), 'description' => $description,
+			// Does the description fit the job they are credited with (a director credit prefers "television director")?
+			$fit = false;
+			foreach( $pRoles as $role ) {
+				$fit = $fit || ( isset( $rolePatterns[$role] ) && preg_match( $rolePatterns[$role], $description ) );
+			}
+			$found[] = [ 'qid' => $hit['id'], 'label' => (string)( $hit['label'] ?? $hit['id'] ), 'description' => $description, 'fit' => $fit,
 				'likely' => (bool)preg_match( '/actor|actress|director|producer|writer|screenwriter|dramatist|playwright|television|film|comedian|presenter|novelist|cinematograph|editor|composer|journalist/i', $description ) ];
 		}
-		usort( $found, fn( $a, $b ) => $b['likely'] <=> $a['likely'] );
+		usort( $found, fn( $a, $b ) => [ $b['fit'], $b['likely'] ] <=> [ $a['fit'], $a['likely'] ] );
 		return $found;
 	}
 

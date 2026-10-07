@@ -359,7 +359,9 @@ person** - the record with a Wikidata item (else the lowest id) is used, the oth
 ticked as 'likely'), and each person also has "a contact from the name only" (`createNameOnly()`, tagged WP01/WP02/WP07 from the credit roles). Nothing is created until the person is
 ticked and a radio chosen; the pick is `0:Q123` (a Wikidata item chosen by name, no TMDb record) or `0:` (name only). Batch size is 40 (lookup and create cap); a batch of 40 on NCIS
 (31 Wikidata + 9 TMDb-only) looked up in 2.7 s and created in 11.4 s. The list at the foot of the page is only people the lookup offset has stepped past ("Stepped past (N)"), so a new
-show shows no list. A show's **creator** (Gene Roddenberry on Andromeda) is on the TMDb show record's `created_by`, not in its aggregate credits, so `fetchTmdbTvCredits()` adds the
+show shows no list. **Created by**: the TV page's Reload from Plex also writes the show's creators onto the program as `creator` rows (`fetchTmdbCreators()`, first batch only; shown as "Created by" on the show page).
+Candidates for a person not on TMDb are ranked by **role fit** (`searchWikidataByName( $name, $roles )`: a director credit prefers a description containing "director", a writer credit "writer/screenwriter/
+dramatist...", a star "actor/actress...", a creator "creator/producer/writer/director"); a fit gets a green tick and is listed first, a merely screen-related description a grey tick. A show's **creator** (Gene Roddenberry on Andromeda) is on the TMDb show record's `created_by`, not in its aggregate credits, so `fetchTmdbTvCredits()` adds the
 creators (one extra `/tv/{id}` call) as writers - Plex credits them as such. The page lists **whoever the lookup offset has stepped past** (up to 200) under the lookup,
 with a "Look them up again from the top" button, because people are stepped past (skipped, or left unresolved) by the lookup offset and would otherwise vanish from view.
 People left unticked stay at the top of the list until decided or skipped; only people with nothing to act on (not found on TMDb) are
