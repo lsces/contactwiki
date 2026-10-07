@@ -25,7 +25,7 @@
  * loading): its seasons' credit directories (FisheyeSeason::deriveCreditDirectory(), built from the
  * episodes - "Build credit directories") and the program's own cast rows are surveyed, matched and
  * linked the same way; TMDb is asked for the show's aggregate credits (one call) instead of each
- * film's. People credited on fewer than `min` episodes are left out of the lookup list.
+ * film's. Which cast get a season row at all is the season directory's own rule (FisheyeSeason::deriveCreditDirectory()).
  *
  * @package contactwiki
  * @subpackage functions
@@ -58,7 +58,6 @@ const LOAD_WIKI_FILM_PEOPLE_TIME_BUDGET = 35;
 
 $scope = ( $_REQUEST['scope'] ?? '' ) === 'tv' ? 'tv' : 'film';
 $programId = $scope === 'tv' ? (int)( $_REQUEST['program_id'] ?? 0 ) : 0;
-$minCredits = max( 1, (int)( $_REQUEST['min'] ?? ( $scope === 'tv' ? 2 : 1 ) ) );
 
 // TV with no show picked yet: the show picker, nothing else.
 if( $scope === 'tv' && !$programId ) {
@@ -104,30 +103,9 @@ $candidatesFor = function( string $pName ) use ( $nameIndex ): array {
 
 $result = null;
 $createResult = null;
-$buildResult = null;
 $reloadResult = null;
 $start = max( 0, (int)( $_REQUEST['start'] ?? 0 ) );
 $resolve = !empty( $_REQUEST['fResolve'] ) || !empty( $_REQUEST['fCreate'] );
-
-// ---- TV: build every season's credit directory from its episodes (no network, idempotent).
-if( $scope === 'tv' && !empty( $_REQUEST['fBuild'] ) ) {
-	$buildResult = [ 'seasons' => 0, 'inserted' => 0, 'archived' => 0 ];
-	foreach( $seasonIds as $seasonId ) {
-		$season = new FisheyeSeason( null, $seasonId );
-		$season->load();
-		foreach( $season->deriveCreditDirectory() as $roleCounts ) {
-			$buildResult['inserted'] += $roleCounts['inserted'];
-			$buildResult['archived'] += $roleCounts['archived'];
-		}
-		$buildResult['seasons']++;
-	}
-	// The picker's own counts are stale after a build.
-	foreach( FisheyeCredits::programOverview( $programId ) as $candidateProgram ) {
-		if( $candidateProgram['content_id'] === $programId ) {
-			$program = $candidateProgram;
-		}
-	}
-}
 
 // ---- TV: reload the seasons' episodes from Plex (full cast per episode), which rebuilds each credit directory.
 // Each season is dozens of Plex calls and thumbnail fetches, so a few seasons per submit with a Continue.
@@ -260,7 +238,7 @@ if( $createResult ) {
 
 // ---- Survey after any write, so the page always shows what is left.
 $survey = $surveyFn();
-$counts = [ 'linked' => 0, 'match' => 0, 'choose' => 0, 'unmatched' => 0, 'belowMin' => 0 ];
+$counts = [ 'linked' => 0, 'match' => 0, 'choose' => 0, 'unmatched' => 0 ];
 $reviewList = [];
 $unmatchedAll = [];
 foreach( $survey['people'] as $key => $person ) {
@@ -285,12 +263,7 @@ foreach( $survey['people'] as $key => $person ) {
 		$reviewList[] = $person;
 	} else {
 		$counts['unmatched']++;
-		// Only people credited often enough are looked up (TV: on at least `min` episodes).
-		if( ( $person['episodes'] ?: $person['credits'] ) >= $minCredits ) {
-			$unmatchedAll[] = $person;
-		} else {
-			$counts['belowMin']++;
-		}
+		$unmatchedAll[] = $person;
 	}
 }
 
@@ -411,10 +384,12 @@ if( $resolve ) {
 
 $gBitSmarty->assign( 'scope', $scope );
 $gBitSmarty->assign( 'program', $program );
-$gBitSmarty->assign( 'min', $minCredits );
-$gBitSmarty->assign( 'buildResult', $buildResult );
+// The show's own page (the generic dispatcher routes to whatever display page the program has) and "finished":
+// the show has credits and every one is linked to a contact.
+$gBitSmarty->assign( 'programUrl', $programId ? BIT_ROOT_URL.'index.php?content_id='.$programId : null );
+$gBitSmarty->assign( 'finished', $scope === 'tv' && $counts['linked'] > 0 && !$counts['match'] && !$counts['choose'] && !$counts['unmatched'] );
 $gBitSmarty->assign( 'reloadResult', $reloadResult );
-$gBitSmarty->assign( 'hiddenFields', array_filter( [ 'scope' => $scope === 'tv' ? 'tv' : null, 'program_id' => $programId ?: null, 'min' => $minCredits ] ) );
+$gBitSmarty->assign( 'hiddenFields', array_filter( [ 'scope' => $scope === 'tv' ? 'tv' : null, 'program_id' => $programId ?: null ] ) );
 $gBitSmarty->assign( 'survey', [ 'films' => $survey['films'], 'credits' => $survey['credits'], 'people' => count( $survey['people'] ) ] );
 $gBitSmarty->assign( 'counts', $counts );
 $gBitSmarty->assign( 'reviewList', array_slice( $reviewList, 0, LOAD_WIKI_FILM_PEOPLE_BATCH ) );

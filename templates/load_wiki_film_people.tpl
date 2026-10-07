@@ -4,13 +4,13 @@
 
 <div class="admin liberty">
 	<div class="header">
-		<h1>{if $scope == 'tv'}{tr}Load Wiki TV People{/tr}{if $program}: {$program.title|escape}{/if}{else}{tr}Load Wiki Film People{/tr}{/if}</h1>
+		<h1>{if $scope == 'tv'}{tr}Load Wiki TV People{/tr}{if $program}: <a href="{$programUrl|escape}" title="{tr}Back to the show{/tr}">{$program.title|escape}</a>{/if}{else}{tr}Load Wiki Film People{/tr}{/if}</h1>
 	</div>
 
 	<div class="body">
 
 		{if $scope == 'tv' && !$program}
-			<p>{tr}Pick a show. Each season's credits are built from its episodes (a season reload does it automatically, or press Build on the show's page), then its people are matched to contacts or created.{/tr}</p>
+			<p>{tr}Pick a show (or open this from a show's own page). Reload it from Plex to build its credits from the episodes, then its people are matched to contacts or created.{/tr}</p>
 			<table class="table table-condensed">
 				<thead><tr><th>{tr}Show{/tr}</th><th>{tr}Seasons{/tr}</th><th>{tr}Seasons with credits{/tr}</th><th>{tr}Credit rows{/tr}</th><th>{tr}Not linked yet{/tr}</th></tr></thead>
 				<tbody>
@@ -80,18 +80,14 @@
 					{/if}
 				</div>
 			{/if}
-			{if $buildResult}
-				<div class="alert alert-success">{$buildResult.seasons} {tr}seasons built{/tr}: {$buildResult.inserted} {tr}credit rows written{/tr}, {$buildResult.archived} {tr}archived{/tr}.</div>
-			{/if}
 			<p>{$program.seasons} {tr}seasons{/tr}, {$program.built} {tr}with credits built{/tr}.
 				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
-					{foreach from=$hiddenFields key=k item=v}{if $k != 'min'}<input type="hidden" name="{$k}" value="{$v|escape}" />{/if}{/foreach}
-					<input type="submit" class="btn btn-default" name="fBuild" value="{tr}Build credit directories{/tr}" title="{tr}Re-reads the episodes already stored - it does not contact Plex{/tr}" />
-					<input type="submit" class="btn btn-default" name="fReload" value="{tr}Reload seasons from Plex (full cast){/tr}" title="{tr}Fetches each season's episodes and full cast from Plex, then rebuilds its credit directory{/tr}" />
-					&nbsp; {tr}Look up people credited on at least{/tr} <input type="number" min="1" name="min" value="{$min}" style="width:5em" /> {tr}episodes{/tr}
-					<input type="submit" class="btn btn-default" value="{tr}Apply{/tr}" />
-					&nbsp; <a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv">{tr}Pick another show{/tr}</a>
+					{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
+					<input type="submit" class="btn btn-default" name="fReload" value="{tr}Reload from Plex{/tr}" title="{tr}Refreshes every season's episode details and full cast from Plex (thumbnails are kept) and rebuilds the show's credits{/tr}" />
 				{/form}</p>
+			{if $finished}
+				<div class="alert alert-success">{tr}Every credit on this show is linked to a contact.{/tr} <a class="btn btn-default" href="{$programUrl|escape}">{tr}Back to{/tr} {$program.title|escape}</a></div>
+			{/if}
 		{/if}
 
 		<p>{if $scope == 'tv'}{$program.seasons} {tr}seasons and the show{/tr}{else}{$survey.films} {tr}films{/tr}{/if}, {$survey.credits} {tr}credits{/tr}, {$survey.people} {tr}distinct people{/tr}:
@@ -163,7 +159,6 @@
 
 		{if $counts.unmatched}
 			<h2>{tr}People with no contact yet{/tr}</h2>
-			{if $counts.belowMin}<p class="text-muted">{$counts.belowMin} {tr}more are credited on fewer than the minimum and are not listed - lower the minimum above to include them.{/tr}</p>{/if}
 			{if !$lookup}
 				<p>{tr}Most-credited first. Look up the next{/tr} {$lookupBatch} {tr}on TMDb and Wikidata (this contacts those services, so it takes a few seconds):{/tr}</p>
 				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
@@ -251,7 +246,7 @@
 						<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create / Link Selected{/tr}" />
 					{/form}
 				{else}
-					{if $counts.belowMin}<p>{tr}Nobody left to look up at this minimum.{/tr} {$counts.belowMin} {tr}people credited on fewer episodes are not listed - lower the minimum above and press Apply to include them.{/tr}</p>{else}<p>{tr}Nobody left to look up.{/tr}</p>{/if}
+					<p>{tr}Nobody left to look up.{/tr}</p>
 				{/if}
 			{/if}
 		{/if}
