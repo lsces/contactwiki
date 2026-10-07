@@ -76,17 +76,18 @@ class WikimediaCache {
 	 *
 	 * @param array<string,string> $pRequests  key => url
 	 * @param string $pUserAgent               the User-Agent value (Wikimedia asks clients to identify themselves)
-	 * @return array<string,array{status:int, body:?string}>  key => result; a transport failure has status 0 and a null body
+	 * @return array<string,array{status:int, body:?string, retry_after:int}>  key => result; a transport failure has status 0 and a null body; retry_after is the seconds a refusing server asked for (0 if none)
 	 */
 	public static function multiFetch( array $pRequests, string $pUserAgent, int $pConcurrency = self::CONCURRENCY, int $pTimeout = 20 ): array {
 		if( !$pRequests || !function_exists( 'curl_multi_init' ) ) {
 			return [];
 		}
 		$results = [];
+		$retryAfter = [];
 		$queue = array_keys( $pRequests );
 		$active = [];
 		$multi = curl_multi_init();
-		$start = function( $pKey ) use ( &$active, $multi, $pRequests, $pUserAgent, $pTimeout ) {
+		$start = function( $pKey ) use ( &$active, &$retryAfter, $multi, $pRequests, $pUserAgent, $pTimeout ) {
 			$handle = curl_init( $pRequests[$pKey] );
 			curl_setopt_array( $handle, [
 				CURLOPT_RETURNTRANSFER => true,
@@ -97,6 +98,12 @@ class WikimediaCache {
 				CURLOPT_USERAGENT      => $pUserAgent,
 				CURLOPT_ENCODING       => '',
 				CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_2TLS,
+				CURLOPT_HEADERFUNCTION => function( $pHandle, $pHeader ) use ( &$retryAfter, $pKey ) {
+					if( preg_match( '/^Retry-After:\s*(\d+)/i', $pHeader, $m ) ) {
+						$retryAfter[$pKey] = (int)$m[1];
+					}
+					return strlen( $pHeader );
+				},
 			] );
 			curl_multi_add_handle( $multi, $handle );
 			$active[spl_object_id( $handle )] = [ $pKey, $handle ];
@@ -111,7 +118,7 @@ class WikimediaCache {
 				[ $key ] = $active[spl_object_id( $handle )];
 				$ok = $info['result'] === CURLE_OK;
 				$results[$key] = [ 'status' => $ok ? (int)curl_getinfo( $handle, CURLINFO_RESPONSE_CODE ) : 0,
-					'body' => $ok ? (string)curl_multi_getcontent( $handle ) : null ];
+					'body' => $ok ? (string)curl_multi_getcontent( $handle ) : null, 'retry_after' => $retryAfter[$key] ?? 0 ];
 				// No curl_close(): deprecated since PHP 8.5 (it has done nothing since 8.0) - the handle is freed when it goes out of scope.
 				curl_multi_remove_handle( $multi, $handle );
 				unset( $active[spl_object_id( $handle )] );

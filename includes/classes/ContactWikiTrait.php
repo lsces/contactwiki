@@ -1398,19 +1398,26 @@ trait ContactWikiTrait {
 			}
 		}
 		$stats['wanted'] += count( $requests );
-		$results = WikimediaCache::multiFetch( $requests, $userAgent, WikimediaCache::CONCURRENCY, 25 );
-		// Wikimedia answers a burst with HTTP 429 for some of the requests: ask again for just those, after a pause and two at a time,
-		// rather than leave each to be fetched one by one (and slower) while the contact is built.
+		// Summaries and photos are separate Wikimedia services with their own limits: the photos (a thumbnail Commons may have to render
+		// first) go fewer at a time.
+		$summaryRequests = array_filter( $requests, fn( $k ) => $k[0] === 's', ARRAY_FILTER_USE_KEY );
+		$photoRequests = array_diff_key( $requests, $summaryRequests );
+		$results = WikimediaCache::multiFetch( $summaryRequests, $userAgent, WikimediaCache::CONCURRENCY, 25 )
+			+ WikimediaCache::multiFetch( $photoRequests, $userAgent, 3, 25 );
+		// A refusal (HTTP 429/503) is asked again after the pause the server named (up to 6 s), two at a time, rather than left
+		// to be fetched one by one - and slower - while the contact is built.
 		$throttled = array_keys( array_filter( $results, fn( $r ) => in_array( $r['status'], [ 429, 503 ], true ) ) );
 		if( $throttled ) {
 			$stats['retried'] = count( $throttled );
-			sleep( 2 );
+			$stats['wait'] = min( 6, max( 2, ...array_map( fn( $k ) => $results[$k]['retry_after'], $throttled ) ) );
+			sleep( $stats['wait'] );
 			$retry = WikimediaCache::multiFetch( array_intersect_key( $requests, array_flip( $throttled ) ), $userAgent, 2, 25 );
 			$results = $retry + $results;
 		}
 		foreach( $results as $key => $result ) {
 			if( $result['status'] !== 200 || $result['body'] === null || $result['body'] === '' ) {
-				$stats['refused'][$result['status']] = ( $stats['refused'][$result['status']] ?? 0 ) + 1;
+				$label = ( $key[0] === 's' ? 'summary' : 'photo' ).' '.( $result['status'] ?: 'no response' );
+				$stats['refused'][$label] = ( $stats['refused'][$label] ?? 0 ) + 1;
 				continue;
 			}
 			if( $key[0] === 's' ) {
