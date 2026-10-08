@@ -99,12 +99,17 @@
 					{/if}
 				</div>
 			{/if}
-			<p>{$program.seasons} {tr}seasons{/tr}, {$program.built} {tr}with credits built{/tr}.
+			<p>{$program.seasons} {tr}seasons{/tr}, {$program.built} {tr}with credits built{/tr}.</p>
+			{* One row: Reload from Plex, then Link characters beside it - only offered while a cast row has its actor linked but no character contact yet. *}
+			<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6em; margin-bottom:1em;">
 				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
 					{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
 					<input type="submit" class="btn btn-default" name="fReload" value="{tr}Reload from Plex{/tr}" title="{tr}Refreshes every season's episode details and full cast from Plex (thumbnails are kept) and rebuilds the show's credits{/tr}" />
 				{/form}
-				<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_characters.php?program_id={$program.content_id}" title="{tr}Link the characters in this show's seasons to character contacts (needs the show's actors linked first and Wikidata cast data){/tr}">{tr}Link characters{/tr}</a></p>
+				{if $linkableCharacters}
+					<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_characters.php?program_id={$program.content_id}" title="{tr}Link the characters in this show's seasons to character contacts (needs the show's actors linked first and Wikidata cast data){/tr}">{tr}Link characters{/tr} ({$linkableCharacters})</a>
+				{/if}
+			</div>
 			{if $finished}
 				<div class="alert alert-success">{tr}Every credit on this show is linked to a contact.{/tr} <a class="btn btn-default" href="{$programUrl|escape}">{tr}Back to{/tr} {$program.title|escape}</a></div>
 			{/if}
@@ -212,8 +217,8 @@
 						{foreach from=$lookup.people item=person}<input type="hidden" name="batch[]" value="{$person.key|escape}" />{/foreach}
 						<p>{$lookup.people|@count} {tr}looked up{/tr}{if $lookup.remaining}, {$lookup.remaining} {tr}more after these{/tr}{/if}:&nbsp;
 							<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create / Link Selected{/tr}" />
-							<label class="checkbox-inline" title="{tr}Wikimedia refuses bulk photo downloads for a while after a few big batches; without photos a batch makes more contacts per press, and a contact's photo can be loaded later from its own page.{/tr}"><input type="checkbox" name="photos" value="1" /> {tr}Fetch photos too{/tr}</label>
-							<label class="checkbox-inline" title="{tr}Left out, a contact's biography and photo are loaded the first time someone who can edit it opens its page.{/tr}"><input type="checkbox" name="bios" value="1" /> {tr}Fetch biographies too{/tr}</label>
+							<label class="checkbox-inline" style="margin:0 1.5em;" title="{tr}Wikimedia refuses bulk photo downloads for a while after a few big batches; without photos a batch makes more contacts per press, and a contact's photo can be loaded later from its own page.{/tr}"><input type="checkbox" name="photos" value="1" /> {tr}Fetch photos too{/tr}</label>
+							<label class="checkbox-inline" style="margin:0 1.5em;" title="{tr}Left out, a contact's biography and photo are loaded the first time someone who can edit it opens its page.{/tr}"><input type="checkbox" name="bios" value="1" /> {tr}Fetch biographies too{/tr}</label>
 							<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?fResolve=1&amp;start={$start+$lookup.people|@count}{foreach from=$hiddenFields key=k item=v}&amp;{$k}={$v|escape:'url'}{/foreach}">{tr}Skip these{/tr}</a></p>
 						<table class="table table-condensed">
 							<thead>

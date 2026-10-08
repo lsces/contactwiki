@@ -548,6 +548,14 @@ if( $resolve ) {
 
 $gBitSmarty->assign( 'scope', $scope );
 $gBitSmarty->assign( 'program', $program );
+// Cast rows that have their actor linked but no character contact yet - what the characters pass could act on (the Link characters button is only offered while there are some).
+$linkableCharacters = 0;
+if( $scope === 'tv' && !empty( $seasonIds ) ) {
+	foreach( FisheyeCredits::characterRowsForFilms( $seasonIds ) as $characterRows ) {
+		$linkableCharacters += count( array_filter( $characterRows, fn( $r ) => !$r['linked'] && $r['actor_qid'] ) );
+	}
+}
+$gBitSmarty->assign( 'linkableCharacters', $linkableCharacters );
 // The show's own page (the generic dispatcher routes to whatever display page the program has) and "finished":
 // the show has credits and every one is linked to a contact.
 $gBitSmarty->assign( 'programUrl', $programId ? BIT_ROOT_URL.'index.php?content_id='.$programId : null );
