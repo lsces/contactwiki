@@ -1285,6 +1285,64 @@ trait ContactWikiTrait {
 		return $items;
 	}
 
+	/** Rank and courtesy words a character's name often starts with ("DI Jack Frost", "Dr David McKenzie"): they become the contact's prefix. */
+	private const CHARACTER_PREFIXES = [ 'mr', 'mrs', 'ms', 'miss', 'mx', 'dr', 'doctor', 'prof', 'professor', 'sir', 'dame', 'lord', 'lady', 'rev', 'father', 'fr', 'sister', 'nurse',
+		'di', 'dci', 'dcs', 'ds', 'dc', 'pc', 'wpc', 'ps', 'sgt', 'sergeant', 'insp', 'inspector', 'det', 'detective', 'supt', 'superintendent', 'constable', 'chief',
+		'cpt', 'capt', 'captain', 'maj', 'major', 'col', 'colonel', 'lt', 'lieutenant', 'cdr', 'commander', 'gen', 'general', 'adm', 'admiral', 'judge', 'uncle', 'aunt' ];
+
+	/**
+	 * Split a character's name into the contact's name parts: leading rank/courtesy words are the prefix, a trailing Jr/Sr/II/III the suffix,
+	 * the last word (with a leading particle such as "de" or "van") the surname and what is between the forename. "DI Jack Frost" is
+	 * prefix DI, forename Jack, surname Frost - the stored title "Frost, DI Jack" and the display name "DI Jack Frost" both fall out of that.
+	 *
+	 * @return array{prefix:string, forename:string, surname:string, suffix:string}
+	 */
+	public static function splitCharacterName( string $pName ): array {
+		$words = preg_split( '/\s+/u', trim( preg_replace( '/\([^)]*\)/u', ' ', $pName ) ), -1, PREG_SPLIT_NO_EMPTY ) ?: [];
+		$prefix = [];
+		while( count( $words ) > 1 && in_array( mb_strtolower( str_replace( '.', '', $words[0] ) ), self::CHARACTER_PREFIXES, true ) ) {
+			$prefix[] = array_shift( $words );
+		}
+		$suffix = '';
+		if( count( $words ) > 1 && in_array( mb_strtolower( str_replace( '.', '', end( $words ) ) ), [ 'jr', 'sr', 'ii', 'iii', 'iv' ], true ) ) {
+			$suffix = array_pop( $words );
+		}
+		$surname = (string)array_pop( $words );
+		while( $words && in_array( mb_strtolower( end( $words ) ), [ 'de', 'del', 'della', 'di', 'da', 'van', 'von', 'der', 'den', 'la', 'le', 'st', 'st.', 'mac', 'mc' ], true ) ) {
+			$surname = array_pop( $words ).' '.$surname;
+		}
+		return [ 'prefix' => implode( ' ', $prefix ), 'forename' => implode( ' ', $words ), 'surname' => $surname, 'suffix' => $suffix ];
+	}
+
+	/**
+	 * Create a contact for a character from its name alone (no Wikidata item): a wiki individual of type Character, named by
+	 * splitCharacterName(), with a one-line description saying who played it where - which also puts the actor's name in the search index.
+	 *
+	 * @param string $pDescription  plain text for the contact's description, or ''
+	 * @return array{content:object}|array{error:string}
+	 */
+	public static function createCharacterContact( string $pName, string $pDescription = '' ): array {
+		$parts = self::splitCharacterName( $pName );
+		if( $parts['surname'] === '' ) {
+			return [ 'error' => KernelTools::tra( 'No name to create a character from.' ) ];
+		}
+		$gContent = new ContactWikiIndividual();
+		$storeHash = $parts + [ 'fContactTypesSubmitted' => 1, 'contact_types' => [ self::CHARACTER_TYPE ] ];
+		if( !$gContent->store( $storeHash ) ) {
+			return [ 'error' => implode( '; ', $gContent->mErrors ) ];
+		}
+		if( $pDescription !== '' ) {
+			$gContent->saveStoredDescription( self::plainTextToHtmlParagraphs( $pDescription ) );
+		}
+		return [ 'content' => $gContent ];
+	}
+
+	/** Save the description (the contact's body text) and nothing else, keeping the stored title so the search index is rebuilt from both. */
+	public function saveStoredDescription( string $pHtml ): bool {
+		$hash = [ 'content_id' => $this->mContentId, 'title' => $this->storedTitle(), 'edit' => $pHtml ];
+		return (bool)\Bitweaver\Liberty\LibertyContent::store( $hash );
+	}
+
 	public static function findContactByMusicBrainzId( string $pMbid ): ?array {
 		return self::findWikiContactByXref( 'musicbrainz', strtolower( $pMbid ) );
 	}

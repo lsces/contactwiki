@@ -486,6 +486,19 @@ Seasons: `FisheyeSeason::deriveCreditDirectory()` writes one `character` row per
 item(s) (`wikidataSeriesItems()`, several for a franchise) the same way. Doctor Who (1963) has 54 of 67 cast statements with a character item;
 about 60% of the library's shows with a series item carry any.
 
+### Recurring roles without Wikidata (TV shows)
+
+Wikidata rarely lists a programme's cast with their characters (A Touch of Frost's series item has none), so for a show `load_wiki_characters.php?program_id=` also
+offers a review list of its recurring roles, built by `FisheyeCredits::recurringCharacters()` from the `character` rows Plex gives the seasons: roles in at least N
+seasons (2, 3, 4, 5 or 8; default 3), with spellings of one role folded together when the same actor plays them ("Sgt Don Brady" / "Sgt. Brady", "D.C.I. Peters" /
+"DCI Peters"; `characterRoleKey()`). Ticking a role makes a character contact from the role text alone - `ContactWikiTrait::createCharacterContact()`, a wiki
+individual of type WP09 with no Wikidata item, named by `splitCharacterName()` (rank words such as DI/Sgt/Dr become the prefix, so "DI Jack Frost" is stored as
+"Frost, DI Jack" and displays as typed) and described as "<role> in <show>, played by <actors> (N seasons)" - and links every row of the role, in every season, with an
+empty `xkey` (`syncLinkKeys()` only touches contacts holding a Wikidata item, so these are left alone). A role already linked to one contact in the show joins it, so a
+new season's rows are picked up by a second run. A role played by more than two different actors is not ticked: it is probably a job ("Pathologist"), not a character.
+The contact's title and description go into the search index like any other, so a search for any word of the name, the show or the actor finds it (words under three
+letters, "DI" for one, are not indexed). The show page's Characters (n) button counts the roles waiting.
+
 ## One name, several people (the "split" choice)
 The survey groups credits by name, so two different people of one name (John Hopkins: the 1931-98 screenwriter on Thunderball and a
 1975-born actor on Alice in Wonderland) arrive as one entry. `findTmdbPersonForCredit()` now also returns which TMDb movie gave which
