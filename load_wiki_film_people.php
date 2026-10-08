@@ -232,10 +232,6 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 	$createStarted = microtime( true );
 	ContactWikiIndividual::$skipPhotos = empty( $_REQUEST['photos'] );
 	ContactWikiIndividual::$skipBiography = empty( $_REQUEST['bios'] );
-	// One scan of the contact table's TMDb/Wikidata ids instead of several per person (see preloadContactLookups()).
-	$stepStart = microtime( true );
-	ContactWikiIndividual::preloadContactLookups();
-	ContactWikiIndividual::$stepTimings['contact lookup map'] = ( ContactWikiIndividual::$stepTimings['contact lookup map'] ?? 0.0 ) + microtime( true ) - $stepStart;
 	$stepStart = microtime( true );
 	$survey = $surveyFn();
 	ContactWikiIndividual::$stepTimings['credit survey'] = ( ContactWikiIndividual::$stepTimings['credit survey'] ?? 0.0 ) + microtime( true ) - $stepStart;
@@ -324,8 +320,6 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		if( $also ) {
 			$gContent->addTmdbAliases( $also );
 		}
-		// The next person must find this contact (a second name for the same Wikidata item would otherwise create it twice).
-		ContactWikiIndividual::refreshContactLookups( (int)$gContent->mContentId );
 		// The contact's own current Wikidata id (a merged item's old id is what TMDb and old links still hold).
 		$linkQid = $gContent->getWikidataQid() ?: $qid;
 		$stepStart = microtime( true );
@@ -395,7 +389,6 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 // ---- Stage 2 lookup: TMDb person ids from the films' credits, then Wikidata Q-ids, for the next batch.
 $lookup = null;
 if( $resolve ) {
-	ContactWikiIndividual::preloadContactLookups();
 	$batch = array_slice( $unmatchedAll, $start, LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH );
 	$filmIds = [];
 	foreach( $batch as $person ) {
