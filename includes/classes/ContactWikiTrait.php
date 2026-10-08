@@ -209,7 +209,7 @@ trait ContactWikiTrait {
 		if( $wikiTitle !== null ) {
 			$bio = self::fetchWikipediaSummary( $wikiTitle );
 			if( $bio !== null ) {
-				$bioHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => self::plainTextToHtmlParagraphs( $bio ) ];
+				$bioHash = [ 'content_id' => $this->mContentId, 'title' => $this->storedTitle(), 'edit' => self::plainTextToHtmlParagraphs( $bio ) ];
 				\Bitweaver\Liberty\LibertyContent::store( $bioHash );
 				$items[] = KernelTools::tra( 'Biography' ).' ('.KernelTools::tra( 'Wikipedia' ).')';
 			}
@@ -262,13 +262,22 @@ trait ContactWikiTrait {
 			return $ret;
 		}
 		if( $needBio && ( $title = self::wikipediaTitle( $entity ) ) !== null && ( $bio = self::fetchWikipediaSummary( $title ) ) !== null ) {
-			$bioHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => self::plainTextToHtmlParagraphs( $bio ) ];
+			$bioHash = [ 'content_id' => $this->mContentId, 'title' => $this->storedTitle(), 'edit' => self::plainTextToHtmlParagraphs( $bio ) ];
 			$ret['bio'] = (bool)\Bitweaver\Liberty\LibertyContent::store( $bioHash );
 		}
 		if( $needPhoto && ( $file = self::imageFilename( $entity ) ) !== null ) {
 			$ret['photo'] = $this->storeCommonsPhoto( $file );
 		}
 		return $ret;
+	}
+
+	/**
+	 * The title as stored in liberty_content.title - for a person the surname-led "Surname, Forename" sort form. Not getTitle(), which
+	 * Contact overrides to return the display string "Contact - <name>", nor mInfo['title'], which ContactPerson rewrites to the
+	 * forename-first display form: a save that passes either one writes it into the stored title.
+	 */
+	protected function storedTitle(): string {
+		return (string)$this->mDb->getOne( "SELECT `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] );
 	}
 
 	/**
@@ -1243,7 +1252,7 @@ trait ContactWikiTrait {
 			}
 		}
 		if( !empty( $pPerson['biography'] ) ) {
-			$bioHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => self::plainTextToHtmlParagraphs( $pPerson['biography'] ) ];
+			$bioHash = [ 'content_id' => $this->mContentId, 'title' => $this->storedTitle(), 'edit' => self::plainTextToHtmlParagraphs( $pPerson['biography'] ) ];
 			\Bitweaver\Liberty\LibertyContent::store( $bioHash );
 			$items[] = KernelTools::tra( 'Biography' ).' (TMDb)';
 		}
