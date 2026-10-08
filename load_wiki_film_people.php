@@ -526,9 +526,12 @@ if( $resolve ) {
 			// pick) and a contact from the name alone. Searches are capped per request so a show with many such people stays quick.
 			static $nameSearches = 0;
 			$person['manual'] = [];
+			$person['manualOther'] = [];
 			if( $nameSearches++ < 12 ) {
 				foreach( ContactWikiIndividual::searchWikidataByName( $person['name'], array_keys( $person['roles'] ) ) as $candidate ) {
-					$person['manual'][] = $candidate + [ 'value' => '0:'.$candidate['qid'] ];
+					// An item whose description names a screen/writing job is offered; the rest (no description, or a psychiatrist) are kept
+					// behind a fold, so a common name does not bury the page in eight look-alikes and the name-only contact stays the default.
+					$person[$candidate['fit'] || $candidate['likely'] ? 'manual' : 'manualOther'][] = $candidate + [ 'value' => '0:'.$candidate['qid'] ];
 				}
 			}
 			$person['status'] = 'unresolved';
