@@ -147,7 +147,7 @@
 								</td>
 								<td>{$person.name|escape}</td>
 								<td>{if $scope == 'tv' && $person.episodes}{$person.episodes} {tr}episodes{/tr}{else}{$person.credits}{/if} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
-								<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
+								<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">... {tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
 								<td>
 									{if $person.candidates|@count == 1}
 										<a href="{$person.candidates[0].view_url|escape}">{$person.candidates[0].title|escape}</a>
@@ -198,7 +198,7 @@
 							<tr>
 								<td>{$person.name|escape}</td>
 								<td>{if $scope == 'tv' && $person.episodes}{$person.episodes} {tr}episodes{/tr}{else}{$person.credits}{/if} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
-								<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
+								<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">... {tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
 							</tr>
 						{/foreach}
 					</tbody>
@@ -245,7 +245,7 @@
 										</td>
 										<td>{$person.name|escape}</td>
 										<td>{if $scope == 'tv' && $person.episodes}{$person.episodes} {tr}episodes{/tr}{else}{$person.credits}{/if} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
-										<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
+										<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">... {tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
 										<td>
 											{if $person.status == 'unresolved'}
 												<span class="text-muted">{tr}Not resolved{/tr}: {$person.reason|escape}</span>
@@ -302,7 +302,7 @@
 								<tr>
 									<td>{$person.name|escape}</td>
 									<td>{if $scope == 'tv' && $person.episodes}{$person.episodes} {tr}episodes{/tr}{else}{$person.credits}{/if} <span class="text-muted">({foreach from=$person.roles key=role item=n name=roles}{$n} {$role|escape}{if !$smarty.foreach.roles.last}, {/if}{/foreach})</span></td>
-									<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
+									<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted">... {tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
 								</tr>
 							{/foreach}
 						</tbody>
