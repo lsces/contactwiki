@@ -31,7 +31,7 @@
 							<tr>
 								<td><input type="checkbox" class="role-pick" name="role[]" value="{$g.key|escape}"{if $g.actors|@count <= 2} checked="checked"{/if} /></td>
 								<td>{$g.role|escape}{if $g.variants|@count > 1} <span class="text-muted">({tr}also{/tr} {foreach from=$g.variants item=v name=vv}{if !$smarty.foreach.vv.first}{$v|escape}{if !$smarty.foreach.vv.last}, {/if}{/if}{/foreach})</span>{/if}{if $g.existing} <span class="text-muted">- {tr}joins its existing contact{/tr}</span>{/if}</td>
-								<td>{foreach from=$g.actors item=a name=aa}{if $smarty.foreach.aa.iteration <= 4}{$a|escape}{if !$smarty.foreach.aa.last}, {/if}{/if}{/foreach}{if $g.actors|@count > 4} <span class="text-muted">... {tr}and{/tr} {$g.actors|@count - 4} {tr}more{/tr}</span>{/if}{if $g.actors|@count > 2} <span class="text-warning" title="{tr}Several different actors - probably a job, not one character{/tr}">&#9888;</span>{/if}</td>
+								<td>{foreach from=$g.actors item=a name=aa}{if $smarty.foreach.aa.iteration <= 4}{$a|escape}{if !$smarty.foreach.aa.last}, {/if}{/if}{/foreach}{if $g.actors|@count > 4} <span class="text-muted"><span style="margin:0 0.4em;">...</span>{tr}and{/tr} {$g.actors|@count - 4} {tr}more{/tr}</span>{/if}{if $g.actors|@count > 2} <span class="text-warning" title="{tr}Several different actors - probably a job, not one character{/tr}">&#9888;</span>{/if}</td>
 								<td>{$g.seasons}</td>
 								<td>{$g.xref_ids|@count}</td>
 							</tr>
