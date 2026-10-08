@@ -507,6 +507,10 @@ trait ContactWikiTrait {
 			if( ( $person['department'] ?? '' ) === 'Writing' ) {
 				$roles[] = 'writer';
 			}
+			if( in_array( 'Narrator', $jobs, true ) ) {
+				// A narrator is credited on the cast row too (Plex lists them there), so match either.
+				array_push( $roles, 'narrator', 'star' );
+			}
 			$add( $person, $roles );
 		}
 		return $byName;
@@ -866,7 +870,7 @@ trait ContactWikiTrait {
 	/** Does a Wikidata item's description fit one of the credited jobs (director/writer/star/creator)? */
 	public static function descriptionFitsRoles( string $pDescription, array $pRoles ): bool {
 		$patterns = [ 'director' => '/director/i', 'writer' => '/writer|screenwriter|dramatist|playwright|novelist|author/i',
-			'star' => '/actor|actress|performer|comedian|singer/i', 'creator' => '/creator|producer|writer|screenwriter|director/i' ];
+			'star' => '/actor|actress|performer|comedian|singer/i', 'narrator' => '/narrator|voice|broadcaster|presenter|actor|actress|journalist|naturalist|comedian/i', 'creator' => '/creator|producer|writer|screenwriter|director/i' ];
 		foreach( $pRoles as $role ) {
 			if( isset( $patterns[$role] ) && preg_match( $patterns[$role], $pDescription ) ) {
 				return true;
