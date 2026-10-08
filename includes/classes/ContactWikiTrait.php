@@ -209,7 +209,7 @@ trait ContactWikiTrait {
 		if( $wikiTitle !== null ) {
 			$bio = self::fetchWikipediaSummary( $wikiTitle );
 			if( $bio !== null ) {
-				$bioHash = [ 'content_id' => $this->mContentId, 'edit' => self::plainTextToHtmlParagraphs( $bio ) ];
+				$bioHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => self::plainTextToHtmlParagraphs( $bio ) ];
 				\Bitweaver\Liberty\LibertyContent::store( $bioHash );
 				$items[] = KernelTools::tra( 'Biography' ).' ('.KernelTools::tra( 'Wikipedia' ).')';
 			}
@@ -262,7 +262,7 @@ trait ContactWikiTrait {
 			return $ret;
 		}
 		if( $needBio && ( $title = self::wikipediaTitle( $entity ) ) !== null && ( $bio = self::fetchWikipediaSummary( $title ) ) !== null ) {
-			$bioHash = [ 'content_id' => $this->mContentId, 'edit' => self::plainTextToHtmlParagraphs( $bio ) ];
+			$bioHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => self::plainTextToHtmlParagraphs( $bio ) ];
 			$ret['bio'] = (bool)\Bitweaver\Liberty\LibertyContent::store( $bioHash );
 		}
 		if( $needPhoto && ( $file = self::imageFilename( $entity ) ) !== null ) {
@@ -1128,7 +1128,7 @@ trait ContactWikiTrait {
 			}
 		}
 		if( !empty( $pPerson['biography'] ) ) {
-			$bioHash = [ 'content_id' => $this->mContentId, 'edit' => self::plainTextToHtmlParagraphs( $pPerson['biography'] ) ];
+			$bioHash = [ 'content_id' => $this->mContentId, 'title' => $this->getTitle(), 'edit' => self::plainTextToHtmlParagraphs( $pPerson['biography'] ) ];
 			\Bitweaver\Liberty\LibertyContent::store( $bioHash );
 			$items[] = KernelTools::tra( 'Biography' ).' (TMDb)';
 		}
