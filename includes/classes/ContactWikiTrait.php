@@ -46,6 +46,11 @@ trait ContactWikiTrait {
 		}
 		$pBitSmarty->assign( 'roleFlags', $roleFlags );
 
+		// Characters: who played this one in what / the characters this person played (film and season cast rows linked to it).
+		if( class_exists( '\\Bitweaver\\Fisheyemedia\\FisheyeCredits' ) ) {
+			$pBitSmarty->assign( 'characterLinks', \Bitweaver\Fisheyemedia\FisheyeCredits::characterLinksFor( (int)$this->mContentId ) );
+		}
+
 		// Large profile thumbnail - the first downloaded Wikidata image, if any (item is
 		// multiple=1, but a wiki contact only ever has the one auto-downloaded image today). The
 		// 'biography' and 'external' groups (dob/dod/pob/pod, external-id links) are deliberately
@@ -765,6 +770,63 @@ trait ContactWikiTrait {
 	 * @param string[] $pRoles  the person's credit roles (director/writer/star/creator)
 	 * @return list<array{qid:string, label:string, description:string, fit:bool, likely:bool}>
 	 */
+	/** The type tag a character contact carries (a fictional character is a wiki individual with this type). */
+	public const CHARACTER_TYPE = 'WP09';
+
+	/**
+	 * Wikidata items for films by TMDb movie id (P4947).
+	 *
+	 * @param int[] $pTmdbIds
+	 * @return array<int,string>|null  tmdb id => Q-id; null if Wikidata could not be asked
+	 */
+	public static function wikidataFilmItems( array $pTmdbIds ): ?array {
+		$pTmdbIds = array_values( array_unique( array_filter( array_map( 'intval', $pTmdbIds ) ) ) );
+		if( !$pTmdbIds ) {
+			return [];
+		}
+		$rows = self::wikidataSparql( 'SELECT ?tid ?f WHERE { VALUES ?tid { '.implode( ' ', array_map( fn( $i ) => '"'.$i.'"', $pTmdbIds ) ).' } ?f wdt:P4947 ?tid }' );
+		if( $rows === null ) {
+			return null;
+		}
+		$ret = [];
+		foreach( $rows as $row ) {
+			if( preg_match( '#/(Q\d+)$#', $row['f']['value'] ?? '', $m ) ) {
+				$ret[(int)$row['tid']['value']] ??= $m[1];
+			}
+		}
+		return $ret;
+	}
+
+	/**
+	 * The characters Wikidata gives each film's cast: a cast statement (P161) carrying a character role (P453).
+	 *
+	 * @param string[] $pFilmQids
+	 * @return array<string,array<string,list<array{qid:string,label:string}>>>|null  film Q => actor Q => characters; null if Wikidata could not be asked
+	 */
+	public static function wikidataFilmCharacters( array $pFilmQids ): ?array {
+		$pFilmQids = array_values( array_unique( array_filter( $pFilmQids, fn( $q ) => preg_match( '/^Q\d+$/', (string)$q ) ) ) );
+		if( !$pFilmQids ) {
+			return [];
+		}
+		$rows = self::wikidataSparql( 'SELECT ?f ?a ?c ?cl WHERE { VALUES ?f { '.implode( ' ', array_map( fn( $q ) => 'wd:'.$q, $pFilmQids ) ).' } ?f p:P161 ?s . ?s ps:P161 ?a . ?s pq:P453 ?c . '
+			.'OPTIONAL { ?c rdfs:label ?cl . FILTER( LANG( ?cl ) = "en" ) } }' );
+		if( $rows === null ) {
+			return null;
+		}
+		$ret = [];
+		foreach( $rows as $row ) {
+			if( preg_match( '#/(Q\d+)$#', $row['f']['value'] ?? '', $f ) && preg_match( '#/(Q\d+)$#', $row['a']['value'] ?? '', $a ) && preg_match( '#/(Q\d+)$#', $row['c']['value'] ?? '', $c ) ) {
+				$ret[$f[1]][$a[1]][$c[1]] = [ 'qid' => $c[1], 'label' => (string)( $row['cl']['value'] ?? '' ) ];
+			}
+		}
+		foreach( $ret as &$byActor ) {
+			foreach( $byActor as &$chars ) {
+				$chars = array_values( $chars );
+			}
+		}
+		return $ret;
+	}
+
 	/**
 	 * The Wikidata item(s) of a TV series, found through its TMDb TV id (P4983) or IMDb id (P345). A show can have more than one (Doctor Who has
 	 * one for the franchise and one for 1963-1989). Empty if Wikidata has none or cannot be asked.
@@ -1129,7 +1191,7 @@ trait ContactWikiTrait {
 	 * @param bool|null $pIsGroup
 	 * @return array{content:object}|array{error:string}
 	 */
-	public static function createFromWikidata( string $pQid, ?bool $pIsGroup = null ): array {
+	public static function createFromWikidata( string $pQid, ?bool $pIsGroup = null, array $pExtraTypes = [] ): array {
 		$entity = self::fetchWikidataEntity( $pQid );
 		if( !$entity ) {
 			return [ 'error' => KernelTools::tra( 'Could not fetch that Wikidata entity.' ).' ('.$pQid.')' ];
@@ -1162,7 +1224,7 @@ trait ContactWikiTrait {
 		}
 		// Two Wikidata classes can map to the same code (orchestra + symphony orchestra -> WB02) -
 		// store each code once.
-		$storeHash['contact_types'] = array_values( array_unique( $storeHash['contact_types'] ) );
+		$storeHash['contact_types'] = array_values( array_unique( array_merge( $storeHash['contact_types'], $pExtraTypes ) ) );
 		// The Wikipedia text goes in with the contact's first save, rather than a second full save of the contact afterwards.
 		$t = microtime( true );
 		$wikiTitle = self::wikipediaTitle( $entity );

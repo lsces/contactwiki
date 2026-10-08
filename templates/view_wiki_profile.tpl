@@ -53,6 +53,19 @@
 			{/if}
 		</div>
 
+		{if $characterLinks.playedBy|@count}
+			<div class="wiki-profile-characters">
+				<h2>{tr}Played by{/tr}</h2>
+				<ul>{foreach from=$characterLinks.playedBy item=p}<li>{if $p.actor_url}<a href="{$p.actor_url|escape}">{$p.actor|escape}</a>{else}{$p.actor|escape}{/if} {tr}in{/tr} <a href="{$p.url|escape}">{$p.title|escape}</a></li>{/foreach}</ul>
+			</div>
+		{/if}
+		{if $characterLinks.played|@count}
+			<div class="wiki-profile-characters">
+				<h2>{tr}Characters played{/tr}</h2>
+				<ul>{foreach from=$characterLinks.played item=p}<li>{if $p.character_url}<a href="{$p.character_url|escape}">{$p.role|escape}</a>{else}{$p.role|escape}{/if} {tr}in{/tr} <a href="{$p.url|escape}">{$p.title|escape}</a></li>{/foreach}</ul>
+			</div>
+		{/if}
+
 		{if $gMusicGallery && $gMusicGallery->mGalleryId}
 			<div class="wiki-profile-gallery">
 				<h2>{tr}Discography{/tr}</h2>

@@ -464,3 +464,15 @@ Wikimedia requests (`Fetch biographies too` / `Fetch photos too` on the page tur
 biography only if the entity has an English Wikipedia article, a photo only if it has P18, so nothing is fetched for a contact with
 neither) and is called from `view.php` for users who can edit (`p_contact_update` or admin) - a visitor's view never fetches. A refused or
 failed request stores nothing, so the next editor view tries again. `load_wiki_photos.php` still fills photos in bulk.
+
+## Characters (film cast rows -> character contacts)
+
+A film's `character` rows (fisheyemedia, written by the Plex reloads: text = the role, key = the actor, `data.actor`) are linked to a wiki
+contact for the character by `load_wiki_characters.php`. A character is a wiki individual of type `WP09` Character, keyed by its Wikidata
+item and created with `createFromWikidata( $qid, false, [ CHARACTER_TYPE ] )` (a character is not Q5, so the person/group guess is switched
+off). The character comes from the film's own Wikidata cast statements: `wikidataFilmItems()` finds the film by TMDb id (P4947),
+`wikidataFilmCharacters()` returns each cast statement's character role (P453); a character row is matched through its actor's cast row,
+which must already be linked to the actor's contact (the film people pass first - its xkey is the actor's Q-id). An actor with several
+characters in a film is matched by role text against the character's name, else left alone. A character contact's page lists who played it
+in what, and a person's page the characters they played (`FisheyeCredits::characterLinksFor()`). Wikidata coverage varies: well-documented
+films carry the character qualifiers, many others (e.g. Three Men and a Little Lady) have none and keep the role text only. Seasons: not yet.
