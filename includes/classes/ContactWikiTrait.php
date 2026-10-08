@@ -559,6 +559,67 @@ trait ContactWikiTrait {
 	}
 
 	/**
+	 * A per-request map of every wiki contact's TMDb ids (its own, and the extra ids kept as aliases) and Wikidata ids, for the people
+	 * passes. liberty_xref has no index on item/xkey_ext, so each findContactBy*() is a scan of the whole table, and a pass makes
+	 * several per person (a batch of 70 cost 17s on srv9). One scan here replaces them all. While it is loaded the lookups read from it;
+	 * after creating or changing a contact call refreshContactLookups() so a later person sees it. Null = not loaded, the lookups query.
+	 *
+	 * @var array{tmdb:array<string,array>, alias:array<string,array>, wikidata:array<string,array>}|null
+	 */
+	private static ?array $lookupMap = null;
+
+	/** Load the map (two queries); until then every lookup queries the database as before. The Wikidata rows' data (the whole entity) is not read - only the TMDb rows' (their aliases). */
+	public static function preloadContactLookups(): void {
+		global $gBitDb;
+		self::$lookupMap = [ 'tmdb' => [], 'alias' => [], 'wikidata' => [] ];
+		foreach( [ 'wikidata' => 'NULL', 'tmdb' => 'x.`data`' ] as $item => $dataColumn ) {
+			foreach( $gBitDb->getAll(
+				"SELECT x.`item`, x.`xkey_ext`, $dataColumn AS `data`, lc.`content_id`, lc.`title`, lc.`content_type_guid` FROM `".BIT_DB_PREFIX."liberty_xref` x
+				 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+				 WHERE x.`item` = ? AND x.`end_date` IS NULL AND lc.`content_type_guid` IN ( 'contactwikiindi', 'contactwikigroup' )
+				 ORDER BY lc.`content_id`",
+				[ $item ]
+			) ?: [] as $row ) {
+				self::rememberContactRow( $row );
+			}
+		}
+	}
+
+	/** Forget the map: later lookups query the database again. */
+	public static function dropContactLookups(): void {
+		self::$lookupMap = null;
+	}
+
+	/** Re-read one contact's TMDb and Wikidata ids into the map (indexed by content_id) - call after creating or changing it. */
+	public static function refreshContactLookups( int $pContentId ): void {
+		global $gBitDb;
+		if( self::$lookupMap === null ) {
+			return;
+		}
+		foreach( $gBitDb->getAll(
+			"SELECT x.`item`, x.`xkey_ext`, x.`data`, lc.`content_id`, lc.`title`, lc.`content_type_guid` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+			 WHERE x.`content_id` = ? AND x.`item` IN ( 'tmdb', 'wikidata' ) AND x.`end_date` IS NULL AND lc.`content_type_guid` IN ( 'contactwikiindi', 'contactwikigroup' )",
+			[ $pContentId ]
+		) ?: [] as $row ) {
+			self::rememberContactRow( $row );
+		}
+	}
+
+	private static function rememberContactRow( array $pRow ): void {
+		$contact = [ 'content_id' => (int)$pRow['content_id'], 'title' => $pRow['title'], 'content_type_guid' => $pRow['content_type_guid'] ];
+		$value = trim( (string)$pRow['xkey_ext'] );
+		if( $pRow['item'] === 'wikidata' ) {
+			self::$lookupMap['wikidata'][$value] ??= $contact;
+			return;
+		}
+		self::$lookupMap['tmdb'][$value] ??= $contact;
+		foreach( (array)( ( json_decode( (string)( $pRow['data'] ?? '' ), true ) ?: [] )['also'] ?? [] ) as $alias ) {
+			self::$lookupMap['alias'][trim( (string)$alias )] ??= $contact;
+		}
+	}
+
+	/**
 	 * The wiki contact (individual or group) already holding a given external-id xref value - the
 	 * reverse of every LibertyContent::lookupXref*() helper (content_id -> its xrefs), here value ->
 	 * content_id, so a small direct read, same as load_wiki_artists.php's own music_gallery reverse
@@ -568,6 +629,9 @@ trait ContactWikiTrait {
 	 */
 	private static function findWikiContactByXref( string $pItem, string $pValue ): ?array {
 		global $gBitDb;
+		if( self::$lookupMap !== null && isset( self::$lookupMap[$pItem] ) ) {
+			return self::$lookupMap[$pItem][trim( $pValue )] ?? null;
+		}
 		$row = $gBitDb->getRow(
 			"SELECT lc.content_id, lc.title, lc.content_type_guid FROM `".BIT_DB_PREFIX."liberty_xref` x
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.content_id = x.content_id
@@ -1170,6 +1234,9 @@ trait ContactWikiTrait {
 		// own tmdb xref ({"also":["123"]}).
 		if( !ctype_digit( $pTmdbId ) ) {
 			return null;
+		}
+		if( self::$lookupMap !== null ) {
+			return self::$lookupMap['alias'][$pTmdbId] ?? null;
 		}
 		$row = $gBitDb->getRow(
 			"SELECT lc.content_id, lc.title, lc.content_type_guid FROM `".BIT_DB_PREFIX."liberty_xref` x
