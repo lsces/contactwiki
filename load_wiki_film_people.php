@@ -447,6 +447,8 @@ if( $resolve ) {
 					'description' => $wd['description'] ?? '',
 					'fit'      => ContactWikiIndividual::descriptionFitsRoles( (string)( $wd['description'] ?? '' ), array_keys( $person['roles'] ) ),
 					'is_human' => $wd['is_human'] ?? true,
+					'statements' => (int)( $wd['statements'] ?? 0 ),
+					'sitelinks'  => (int)( $wd['sitelinks'] ?? 0 ),
 					'from_tmdb' => !empty( $wd['from_tmdb'] ),
 					'details'  => $details,
 					'existing' => $existing,
@@ -478,8 +480,9 @@ if( $resolve ) {
 				$person['split'] = [ 'people' => $people, 'default' => count( $qs ) === count( $people ) && count( array_unique( $qs ) ) === count( $qs ) ];
 			}
 		}
-		// Where a TMDb id sits on several Wikidata items, the one whose description fits the credited job comes first (and is the default radio).
-		usort( $person['options'], fn( $a, $b ) => $b['fit'] <=> $a['fit'] );
+		// Where a TMDb id sits on several Wikidata items, the one whose description fits the credited job comes first (and is the default radio);
+		// among equals the item holding the most (statements plus sitelinks) - the other is usually a thin duplicate of it.
+		usort( $person['options'], fn( $a, $b ) => [ $b['fit'], $b['statements'] + $b['sitelinks'] ] <=> [ $a['fit'], $a['statements'] + $a['sitelinks'] ] );
 		// TMDb often holds several records for one person (R. D. Wingfield: two "Writing" ids). Within one
 		// show, the same name doing the same job more than once is the same person: take the record that
 		// has a Wikidata item (or the lowest id) and keep the others as aliases on the contact. Two

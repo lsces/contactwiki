@@ -862,14 +862,15 @@ trait ContactWikiTrait {
 	 * more than one item comes back with every candidate. Null if the query itself fails.
 	 *
 	 * @param list<int|string> $pTmdbIds
-	 * @return array<string, list<array{qid:string, label:string, is_human:bool}>>|null  keyed by TMDb id
+	 * @return array<string, list<array{qid:string, label:string, description:string, is_human:bool, statements:int, sitelinks:int}>>|null  keyed by TMDb id; statements and sitelinks are how much Wikidata holds on the item (a duplicate item is usually the thinner one)
 	 */
 	public static function lookupWikidataByTmdbPersonIds( array $pTmdbIds ): ?array {
 		$ret = [];
 		foreach( array_chunk( array_values( array_unique( array_map( 'strval', $pTmdbIds ) ) ), 150 ) as $chunk ) {
 			$values = implode( ' ', array_map( fn( $id ) => '"'.addslashes( $id ).'"', $chunk ) );
-			$query = 'SELECT ?tid ?item ?itemLabel ?human ?desc WHERE { VALUES ?tid { '.$values.' } ?item wdt:P4985 ?tid . '
+			$query = 'SELECT ?tid ?item ?itemLabel ?human ?desc ?st ?sl WHERE { VALUES ?tid { '.$values.' } ?item wdt:P4985 ?tid . '
 				.'OPTIONAL { ?item schema:description ?desc . FILTER( LANG( ?desc ) = "en" ) } '
+				.'OPTIONAL { ?item wikibase:statements ?st ; wikibase:sitelinks ?sl . } '
 				.'BIND( EXISTS { ?item wdt:P31 wd:Q5 } AS ?human ) SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } }';
 			$context = stream_context_create( [ 'http' => [
 				'method'  => 'POST',
@@ -888,6 +889,8 @@ trait ContactWikiTrait {
 						'label'    => $row['itemLabel']['value'] ?? $m[1],
 						'description' => $row['desc']['value'] ?? '',
 						'is_human' => ( $row['human']['value'] ?? '' ) === 'true',
+						'statements' => (int)( $row['st']['value'] ?? 0 ),
+						'sitelinks'  => (int)( $row['sl']['value'] ?? 0 ),
 					];
 				}
 			}
