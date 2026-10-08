@@ -232,7 +232,9 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 	$createStarted = microtime( true );
 	ContactWikiIndividual::$skipPhotos = empty( $_REQUEST['photos'] );
 	ContactWikiIndividual::$skipBiography = empty( $_REQUEST['bios'] );
+	$stepStart = microtime( true );
 	$survey = $surveyFn();
+	ContactWikiIndividual::$stepTimings['credit survey'] = ( ContactWikiIndividual::$stepTimings['credit survey'] ?? 0.0 ) + microtime( true ) - $stepStart;
 	$picks = (array)( $_REQUEST['pick'] ?? [] );
 	$attempted = 0;
 	$needGap = false;
@@ -269,11 +271,13 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		}
 	}
 	$prefetch = [];
+	$stepStart = microtime( true );
 	foreach( $work as [ , , $workTmdb, $workQid ] ) {
 		if( $workQid !== '' && !ContactWikiIndividual::findContactByTmdbId( (string)$workTmdb ) && !ContactWikiIndividual::findContactByWikidataQid( $workQid ) ) {
 			$prefetch[] = $workQid;
 		}
 	}
+	ContactWikiIndividual::$stepTimings['find existing'] = ( ContactWikiIndividual::$stepTimings['find existing'] ?? 0.0 ) + microtime( true ) - $stepStart;
 	$createResult['prefetch'] = $prefetch ? ContactWikiIndividual::prefetchWikidata( $prefetch ) : null;
 	foreach( $work as [ $key, $person, $tmdbId, $qid, $keepAlso ] ) {
 		if( $attempted && microtime( true ) - $createStarted > LOAD_WIKI_FILM_PEOPLE_TIME_BUDGET ) {
@@ -286,9 +290,11 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			usleep( LOAD_WIKI_FILM_PEOPLE_GAP_US );
 		}
 		$personStarted = microtime( true );
+		$stepStart = $personStarted;
 		// tmdb id 0 = no TMDb record: a Wikidata item picked by name ("0:Q123") or a contact from the name alone ("0:").
 		$contact = ( $tmdbId ? ContactWikiIndividual::findContactByTmdbId( (string)$tmdbId ) : null )
 			?: ( $qid !== '' ? ContactWikiIndividual::findContactByWikidataQid( $qid ) : null );
+		ContactWikiIndividual::$stepTimings['find existing'] = ( ContactWikiIndividual::$stepTimings['find existing'] ?? 0.0 ) + microtime( true ) - $stepStart;
 		$wasCreated = false;
 		$needGap = !$contact && $qid !== '' && !\Bitweaver\Contactwiki\WikimediaCache::hasEntity( $qid );
 		if( $contact ) {
@@ -316,7 +322,9 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		}
 		// The contact's own current Wikidata id (a merged item's old id is what TMDb and old links still hold).
 		$linkQid = $gContent->getWikidataQid() ?: $qid;
+		$stepStart = microtime( true );
 		$rows = FisheyeFilm::linkCreditRows( $person['unlinked_ids'], (int)$gContent->mContentId, $linkQid );
+		ContactWikiIndividual::$stepTimings['credit rows linked'] = ( ContactWikiIndividual::$stepTimings['credit rows linked'] ?? 0.0 ) + microtime( true ) - $stepStart;
 		$createResult['rows'] += $rows;
 		$entry = [ 'name' => $person['name'], 'title' => $gContent->getTitle(), 'rows' => $rows, 'view_url' => $gContent->getDisplayUrl(),
 			'seconds' => round( microtime( true ) - $personStarted, 1 ) ];
