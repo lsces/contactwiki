@@ -4,7 +4,7 @@
 
 <div class="admin liberty">
 	<div class="header">
-		<h1>{tr}Load Wiki Characters{/tr}</h1>
+		<h1>{tr}Load Wiki Characters{/tr}{if $programId} - {tr}one show{/tr}{/if}</h1>
 	</div>
 
 	<div class="body">
@@ -15,7 +15,7 @@
 				{if $result.created}<ul>{foreach from=$result.created item=c}<li><a href="{$smarty.const.CONTACTWIKI_PKG_URL}view.php?content_id={$c.content_id}">{$c.title|escape}</a></li>{/foreach}</ul>{/if}
 				{if $result.next !== null}
 					{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_characters.php"}
-						<input type="hidden" name="after" value="{$result.next}" />
+						<input type="hidden" name="after" value="{$result.next}" />{if $programId}<input type="hidden" name="program_id" value="{$programId}" />{/if}
 						<input type="submit" class="btn btn-primary" name="fLoad" value="{tr}Continue{/tr}" />
 					{/form}
 				{/if}
@@ -23,6 +23,7 @@
 		{/if}
 		<p>{$linkedRows} {tr}character rows are linked to a character contact;{/tr} {$unlinked} {tr}are not yet. A character is matched through its film's Wikidata cast list, so the film's actors need to be linked to their contacts first (the film people pass).{/tr}</p>
 		{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_characters.php"}
+			{if $programId}<input type="hidden" name="program_id" value="{$programId}" />{/if}
 			<input type="submit" class="btn btn-primary" name="fLoad" value="{tr}Link characters{/tr}" />
 		{/form}
 	</div>

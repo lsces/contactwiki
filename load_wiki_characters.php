@@ -1,10 +1,11 @@
 <?php
 /**
- * The characters pass for films: each film's cast rows carry the role text from Plex (the film's `character` rows, one per cast member);
+ * The characters pass for films (and, with ?program_id=, one show's seasons): each film's cast rows carry the role text from Plex (the film's `character` rows, one per cast member);
  * this links each to a wiki contact for the character itself. A character is a wiki individual of type Character (WP09) keyed by its
  * Wikidata item - found from the film's own Wikidata cast statements (P161 with a character role, P453), matched to the cast row through
  * the actor's contact link. So the people pass comes first: a cast row not yet linked to its actor is skipped, and picked up on a later run.
  *
+ * A season is matched through its show's Wikidata series item(s) instead of a film item (several for a franchise such as Doctor Who).
  * Films are done in chunks within a time budget, with a Continue link. Photos and biographies are left for the contact's first edit-view.
  * An actor who plays several characters in one film is matched by the role text against each character's name, else left alone.
  *
@@ -29,7 +30,13 @@ $gBitSystem->verifyPermission( 'p_contact_update' );
 const LOAD_WIKI_CHARACTERS_CHUNK = 20;
 const LOAD_WIKI_CHARACTERS_BUDGET = 30;
 
-$unlinkedSql = "FROM `".BIT_DB_PREFIX."liberty_xref` c WHERE c.`item` = '".FisheyeCredits::CHARACTER_ITEM."' AND c.`end_date` IS NULL AND ( c.`xref` IS NULL OR c.`xref` = 0 )";
+$programId = (int)( $_REQUEST['program_id'] ?? 0 );
+$seasonIds = $programId ? FisheyeCredits::seasonIdsForProgram( $programId ) : [];
+// What this run covers: one show's seasons, or every film (the two have separate rows under the one item).
+$scopeSql = $programId
+	? ( $seasonIds ? "c.`content_id` IN ( ".implode( ',', array_map( 'intval', $seasonIds ) )." )" : "1 = 0" )
+	: "c.`content_id` IN ( SELECT `content_id` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_type_guid` = 'fisheyefilm' )";
+$unlinkedSql = "FROM `".BIT_DB_PREFIX."liberty_xref` c WHERE c.`item` = '".FisheyeCredits::CHARACTER_ITEM."' AND c.`end_date` IS NULL AND ( c.`xref` IS NULL OR c.`xref` = 0 ) AND $scopeSql";
 $result = null;
 
 if( !empty( $_REQUEST['fLoad'] ) ) {
@@ -47,8 +54,23 @@ if( !empty( $_REQUEST['fLoad'] ) ) {
 		$rowsByFilm = FisheyeCredits::characterRowsForFilms( $filmIds );
 		// Only films with a cast row already linked to its actor can be matched.
 		$wanted = array_filter( $rowsByFilm, fn( $rows ) => (bool)array_filter( $rows, fn( $r ) => !$r['linked'] && $r['actor_qid'] ) );
-		$tmdb = FisheyeFilm::tmdbIdsByFilm( array_keys( $wanted ) );
-		$filmQ = $tmdb ? ContactWikiIndividual::wikidataFilmItems( array_values( $tmdb ) ) : [];
+		// The Wikidata item(s) each film or season is matched through: a film's own item, or its show's series items.
+		$itemsFor = [];
+		if( $programId ) {
+			$itemQids = $wanted ? ContactWikiIndividual::wikidataSeriesItems( FisheyeCredits::tmdbIdFor( $programId ), FisheyeCredits::imdbIdFor( $programId ) ) : [];
+			foreach( array_keys( $wanted ) as $filmId ) {
+				$itemsFor[$filmId] = $itemQids;
+			}
+			$filmQ = $itemQids;
+		} else {
+			$tmdb = FisheyeFilm::tmdbIdsByFilm( array_keys( $wanted ) );
+			$filmQ = $tmdb ? ContactWikiIndividual::wikidataFilmItems( array_values( $tmdb ) ) : [];
+			foreach( $tmdb as $filmId => $tmdbId ) {
+				if( isset( $filmQ[$tmdbId] ) ) {
+					$itemsFor[$filmId] = [ $filmQ[$tmdbId] ];
+				}
+			}
+		}
 		$chars = $filmQ ? ContactWikiIndividual::wikidataFilmCharacters( array_values( $filmQ ) ) : [];
 		if( $filmQ === null || $chars === null ) {
 			$result['throttled'] = true;
@@ -68,12 +90,17 @@ if( !empty( $_REQUEST['fLoad'] ) ) {
 		}
 		$contactFor = [];
 		foreach( $wanted as $filmId => $rows ) {
-			$qid = isset( $tmdb[$filmId] ) ? ( $filmQ[$tmdb[$filmId]] ?? null ) : null;
 			foreach( $rows as $row ) {
-				if( $row['linked'] || !$row['actor_qid'] || !$qid ) {
+				if( $row['linked'] || !$row['actor_qid'] || empty( $itemsFor[$filmId] ) ) {
 					continue;
 				}
-				$candidates = $chars[$qid][$row['actor_qid']] ?? [];
+				$candidates = [];
+				foreach( $itemsFor[$filmId] as $itemQid ) {
+					foreach( $chars[$itemQid][$row['actor_qid']] ?? [] as $candidate ) {
+						$candidates[$candidate['qid']] = $candidate;
+					}
+				}
+				$candidates = array_values( $candidates );
 				if( count( $candidates ) > 1 ) {
 					$byRole = array_filter( $candidates, fn( $c ) => $c['label'] !== '' && ContactWikiIndividual::normaliseName( $c['label'] ) === ContactWikiIndividual::normaliseName( $row['role'] ) );
 					$candidates = count( $byRole ) === 1 ? array_values( $byRole ) : [];
@@ -111,6 +138,7 @@ if( !empty( $_REQUEST['fLoad'] ) ) {
 }
 
 $gBitSmarty->assign( 'result', $result );
+$gBitSmarty->assign( 'programId', $programId );
 $gBitSmarty->assign( 'unlinked', (int)$gBitDb->getOne( "SELECT COUNT(*) $unlinkedSql" ) );
 $gBitSmarty->assign( 'linkedRows', (int)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` c WHERE c.`item` = '".FisheyeCredits::CHARACTER_ITEM."' AND c.`end_date` IS NULL AND c.`xref` > 0" ) );
 $gBitSystem->display( 'bitpackage:contactwiki/load_wiki_characters.tpl', KernelTools::tra( 'Load Wiki Characters' ), [ 'display_mode' => 'edit' ] );

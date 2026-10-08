@@ -103,7 +103,8 @@
 				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
 					{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
 					<input type="submit" class="btn btn-default" name="fReload" value="{tr}Reload from Plex{/tr}" title="{tr}Refreshes every season's episode details and full cast from Plex (thumbnails are kept) and rebuilds the show's credits{/tr}" />
-				{/form}</p>
+				{/form}
+				<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_characters.php?program_id={$program.content_id}" title="{tr}Link the characters in this show's seasons to character contacts (needs the show's actors linked first and Wikidata cast data){/tr}">{tr}Link characters{/tr}</a></p>
 			{if $finished}
 				<div class="alert alert-success">{tr}Every credit on this show is linked to a contact.{/tr} <a class="btn btn-default" href="{$programUrl|escape}">{tr}Back to{/tr} {$program.title|escape}</a></div>
 			{/if}

@@ -475,4 +475,9 @@ off). The character comes from the film's own Wikidata cast statements: `wikidat
 which must already be linked to the actor's contact (the film people pass first - its xkey is the actor's Q-id). An actor with several
 characters in a film is matched by role text against the character's name, else left alone. A character contact's page lists who played it
 in what, and a person's page the characters they played (`FisheyeCredits::characterLinksFor()`). Wikidata coverage varies: well-documented
-films carry the character qualifiers, many others (e.g. Three Men and a Little Lady) have none and keep the role text only. Seasons: not yet.
+films carry the character qualifiers, many others (e.g. Three Men and a Little Lady) have none and keep the role text only.
+
+Seasons: `FisheyeSeason::deriveCreditDirectory()` writes one `character` row per (actor, role) the season's kept cast played, with the episodes
+(`data.k` = "actor|role" is the reconcile key). `load_wiki_characters.php?program_id=` matches them through the show's Wikidata series
+item(s) (`wikidataSeriesItems()`, several for a franchise) the same way. Doctor Who (1963) has 54 of 67 cast statements with a character item;
+about 60% of the library's shows with a series item carry any.
