@@ -672,7 +672,7 @@ trait ContactWikiTrait {
 	 */
 	public static function findTmdbPersonForCredit( string $pName, array $pMovieIds, array $pRoles = [] ): array {
 		$key = self::normaliseName( $pName );
-		$ids = $names = $hits = [];
+		$ids = $names = $hits = $films = [];
 		$looked = 0;
 		$error = null;
 		foreach( $pMovieIds as $movieId ) {
@@ -689,12 +689,13 @@ trait ContactWikiTrait {
 				$ids[$id] = $id;
 				$names[$id] = $candidate['name'];
 				$hits[$movieId] = true;
+				$films[$id][(int)$movieId] = (int)$movieId;
 			}
 			if( count( $hits ) >= 2 ) {
 				break;
 			}
 		}
-		return [ 'ids' => array_values( $ids ), 'names' => $names, 'error' => $ids ? null : $error ];
+		return [ 'ids' => array_values( $ids ), 'names' => $names, 'films' => array_map( 'array_values', $films ), 'error' => $ids ? null : $error ];
 	}
 
 	/**

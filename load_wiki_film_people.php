@@ -237,22 +237,43 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 	$ticked = array_slice( array_map( 'strval', (array)( $_REQUEST['selected2'] ?? [] ) ), 0, LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH );
 	// Everyone about to be created from a Wikidata item has their entity, Wikipedia text and photo fetched together
 	// up front (a few at a time), so the loop below makes no Wikimedia requests of its own.
-	$prefetch = [];
+	// What to create or link, one entry per contact: [ key, person, TMDb id, Wikidata Q-id, whether to keep the form's aliases ]. A pick of
+	// "split" is a name that is really several people (a writer and an actor of one name): each gets its own contact and only the credits of
+	// the films it was found on - the form carries "tmdb:Q|film,film" for each, and everything is re-validated, the form is not trusted.
+	$work = [];
 	foreach( $ticked as $key ) {
-		if( !empty( $survey['people'][$key]['unlinked_ids'] ) && preg_match( '/^(\d+):(Q\d+)$/', (string)( $picks[$key] ?? '' ), $pm )
-			&& !ContactWikiIndividual::findContactByTmdbId( $pm[1] ) && !ContactWikiIndividual::findContactByWikidataQid( $pm[2] ) ) {
-			$prefetch[] = $pm[2];
+		$person = $survey['people'][$key] ?? null;
+		if( !$person || !$person['unlinked_ids'] ) {
+			continue;
+		}
+		$pick = (string)( $picks[$key] ?? '' );
+		if( $pick === 'split' && $scope === 'film' ) {
+			foreach( (array)( $_REQUEST['splitopt'][$key] ?? [] ) as $option ) {
+				if( !preg_match( '/^(\d+):(Q\d+)?\|([\d,]+)$/', (string)$option, $sm ) ) {
+					continue;
+				}
+				$rows = [];
+				foreach( array_map( 'intval', explode( ',', $sm[3] ) ) as $filmId ) {
+					$rows = array_merge( $rows, $person['unlinked_by_item'][$filmId] ?? [] );
+				}
+				if( $rows ) {
+					$part = $person;
+					$part['unlinked_ids'] = $rows;
+					$work[] = [ $key, $part, (int)$sm[1], $sm[2] ?? '', false ];
+				}
+			}
+		} elseif( preg_match( '/^(\d+):(Q\d+)?$/', $pick, $m ) ) {
+			$work[] = [ $key, $person, (int)$m[1], $m[2] ?? '', true ];
+		}
+	}
+	$prefetch = [];
+	foreach( $work as [ , , $workTmdb, $workQid ] ) {
+		if( $workQid !== '' && !ContactWikiIndividual::findContactByTmdbId( (string)$workTmdb ) && !ContactWikiIndividual::findContactByWikidataQid( $workQid ) ) {
+			$prefetch[] = $workQid;
 		}
 	}
 	$createResult['prefetch'] = $prefetch ? ContactWikiIndividual::prefetchWikidata( $prefetch ) : null;
-	foreach( $ticked as $key ) {
-		$person = $survey['people'][$key] ?? null;
-		// "<tmdb person id>:<Q-id or empty>" - both re-validated, the form is not trusted.
-		if( !$person || !$person['unlinked_ids'] || !preg_match( '/^(\d+):(Q\d+)?$/', (string)( $picks[$key] ?? '' ), $m ) ) {
-			continue;
-		}
-		$tmdbId = (int)$m[1];
-		$qid = $m[2] ?? '';
+	foreach( $work as [ $key, $person, $tmdbId, $qid, $keepAlso ] ) {
 		if( $attempted && microtime( true ) - $createStarted > LOAD_WIKI_FILM_PEOPLE_TIME_BUDGET ) {
 			$createResult['remaining']++;
 			continue;
@@ -287,7 +308,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			$gContent->upsertXref( $gContent->mContentId, 'tmdb', [ 'xkey_ext' => (string)$tmdbId ] );
 		}
 		// Further TMDb records of the same person (kept as aliases on the contact's tmdb id).
-		$also = array_filter( array_map( 'intval', explode( ',', (string)( $_REQUEST['also'][$key] ?? '' ) ) ) );
+		$also = $keepAlso ? array_filter( array_map( 'intval', explode( ',', (string)( $_REQUEST['also'][$key] ?? '' ) ) ) ) : [];
 		if( $also ) {
 			$gContent->addTmdbAliases( $also );
 		}
@@ -383,6 +404,11 @@ if( $resolve ) {
 		$allIds = array_merge( $allIds, $person['found']['ids'] );
 	}
 	unset( $person );
+	// TMDb movie id -> the film records that carry it, to tell which films each TMDb person was found on.
+	$filmIdsByTmdb = [];
+	foreach( $tmdbByFilm as $filmId => $movieId ) {
+		$filmIdsByTmdb[$movieId][] = $filmId;
+	}
 	$wikidata = $allIds ? ContactWikiIndividual::lookupWikidataByTmdbPersonIds( $allIds ) : [];
 	$wikidataError = $wikidata === null;
 	$wikidataErrorReason = $wikidataError ? ContactWikiIndividual::getLastFetchError() : null;
@@ -422,7 +448,31 @@ if( $resolve ) {
 					'details'  => $details,
 					'existing' => $existing,
 					'value'    => $tmdbId.':'.( $wd['qid'] ?? '' ),
+					'film_ids' => array_values( array_unique( array_merge( [], ...array_map( fn( $m ) => $filmIdsByTmdb[$m] ?? [], $person['found']['films'][$tmdbId] ?? [] ) ) ) ),
 				];
+			}
+		}
+		// Two TMDb people of one name found on different films (a writer on one film, an actor of the same name on another) are two people, not
+		// one: offer to create each and link only the credits of the films it was found on. One option per TMDb person, with its films.
+		$person['split'] = null;
+		if( $scope === 'film' && count( $person['options'] ) > 1 ) {
+			$byTmdb = [];
+			foreach( $person['options'] as $o ) {
+				$byTmdb[$o['tmdb_id']] ??= $o;
+			}
+			$people = array_values( array_filter( $byTmdb, fn( $o ) => $o['film_ids'] ) );
+			$seenFilms = [];
+			$disjoint = count( $people ) > 1;
+			foreach( $people as $o ) {
+				if( array_intersect( $o['film_ids'], $seenFilms ) ) {
+					$disjoint = false;
+				}
+				$seenFilms = array_merge( $seenFilms, $o['film_ids'] );
+			}
+			if( $disjoint ) {
+				// Two different Wikidata items on different films is the clear case: that is the default choice.
+				$qs = array_filter( array_column( $people, 'qid' ) );
+				$person['split'] = [ 'people' => $people, 'default' => count( $qs ) === count( $people ) && count( array_unique( $qs ) ) === count( $qs ) ];
 			}
 		}
 		// Where a TMDb id sits on several Wikidata items, the one whose description fits the credited job comes first (and is the default radio).

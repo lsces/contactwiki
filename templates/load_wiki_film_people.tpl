@@ -251,8 +251,18 @@
 												{/foreach}
 												<br /><label><input type="radio" name="pick[{$person.key|escape}]" value="0:" {if !$person.manual}checked="checked"{/if} /> {tr}A contact from the name only{/tr} <span class="text-muted">({tr}no Wikidata or TMDb id{/tr})</span></label>
 											{else}
+												{if $person.status == 'choose' && $person.split}
+													<label><input type="radio" name="pick[{$person.key|escape}]" value="split" {if $person.split.default}checked="checked"{/if} />
+														<strong>{tr}Different people with the same name{/tr}</strong> - {tr}create each and link only the films it was found on{/tr}:
+														{foreach from=$person.split.people item=sp name=splitpeople}
+															{if $sp.existing}<a href="{$sp.existing.view_url|escape}">{$sp.existing.title|escape}</a>{elseif $sp.qid != ''}{$sp.label|escape} ({$sp.qid|escape}){if $sp.description}, {$sp.description|escape}{/if}{else}TMDb {$sp.tmdb_id}{/if}
+															<span class="text-muted">[{foreach from=$sp.film_ids item=fid name=sf}{$person.items.$fid|escape}{if !$smarty.foreach.sf.last}, {/if}{/foreach}]</span>{if !$smarty.foreach.splitpeople.last}; {/if}
+															<input type="hidden" name="splitopt[{$person.key|escape}][]" value="{$sp.tmdb_id}:{$sp.qid}|{$sp.film_ids|@implode:','}" />
+														{/foreach}
+													</label><br />
+												{/if}
 												{foreach from=$person.options item=o name=opts}
-													{if $person.status == 'choose'}<label><input type="radio" name="pick[{$person.key|escape}]" value="{$o.value|escape}" {if $smarty.foreach.opts.first}checked="checked"{/if} />{/if}
+													{if $person.status == 'choose'}<label><input type="radio" name="pick[{$person.key|escape}]" value="{$o.value|escape}" {if $smarty.foreach.opts.first && !($person.split && $person.split.default)}checked="checked"{/if} />{/if}
 													{if $person.status == 'choose'}<br />{/if}
 													{if $o.existing}
 														{tr}Link to existing contact{/tr}: <a href="{$o.existing.view_url|escape}">{$o.existing.title|escape}</a>

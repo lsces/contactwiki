@@ -481,3 +481,14 @@ Seasons: `FisheyeSeason::deriveCreditDirectory()` writes one `character` row per
 (`data.k` = "actor|role" is the reconcile key). `load_wiki_characters.php?program_id=` matches them through the show's Wikidata series
 item(s) (`wikidataSeriesItems()`, several for a franchise) the same way. Doctor Who (1963) has 54 of 67 cast statements with a character item;
 about 60% of the library's shows with a series item carry any.
+
+## One name, several people (the "split" choice)
+The survey groups credits by name, so two different people of one name (John Hopkins: the 1931-98 screenwriter on Thunderball and a
+1975-born actor on Alice in Wonderland) arrive as one entry. `findTmdbPersonForCredit()` now also returns which TMDb movie gave which
+person id (`films`); the film people page maps those to film records (each option's `film_ids`). When a film-scope name has two or more
+TMDb people found on disjoint films the row gets a **"Different people with the same name"** radio (pre-selected when each has its own
+Wikidata item): the form carries `splitopt[key][] = "tmdb:Q|film,film"` per person, and the create stage builds one work item per person
+that links only that person's films' unlinked credit rows (`FisheyeCredits::survey()` now returns `unlinked_by_item`). Choosing a single
+person instead still links all of the name's credits to them, as before; a TMDb duplicate of one person (same Wikidata item) is not a split.
+Films the TMDb lookup did not reach (it looks at up to 6 per name) stay unlinked for a later pass. Film scope only; TV already treats one name in
+one show as one person.
