@@ -63,7 +63,13 @@ $programId = $scope === 'tv' ? (int)( $_REQUEST['program_id'] ?? 0 ) : 0;
 // TV with no show picked yet: the show picker, nothing else.
 if( $scope === 'tv' && !$programId ) {
 	$gBitSmarty->assign( 'scope', 'tv' );
-	$gBitSmarty->assign( 'programs', FisheyeCredits::programOverview() );
+	// A finished show - credits built and none left unlinked - is hidden from the picker unless ?all=1 asks for the full list.
+	$allPrograms = FisheyeCredits::programOverview();
+	$showAll = !empty( $_REQUEST['all'] );
+	$finished = array_filter( $allPrograms, fn( $prog ) => $prog['built'] > 0 && $prog['credits'] > 0 && !$prog['unlinked'] );
+	$gBitSmarty->assign( 'programs', $showAll ? $allPrograms : array_values( array_diff_key( $allPrograms, $finished ) ) );
+	$gBitSmarty->assign( 'finishedCount', count( $finished ) );
+	$gBitSmarty->assign( 'showAll', $showAll );
 	$gBitSystem->display( 'bitpackage:contactwiki/load_wiki_film_people.tpl', KernelTools::tra( 'Load Wiki TV People' ), [ 'display_mode' => 'edit' ] );
 	exit;
 }

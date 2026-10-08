@@ -11,6 +11,7 @@
 
 		{if $scope == 'tv' && !$program}
 			<p>{tr}Pick a show (or open this from a show's own page). Reload it from Plex to build its credits from the episodes, then its people are matched to contacts or created.{/tr}</p>
+			{if $finishedCount}<p class="text-muted">{$finishedCount} {tr}finished shows (credits built, none left unlinked){/tr} {if $showAll}{tr}are listed below.{/tr} <a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv">{tr}Hide them{/tr}</a>{else}{tr}are hidden.{/tr} <a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv&amp;all=1">{tr}Show them{/tr}</a>{/if}</p>{/if}
 			<table class="table table-condensed">
 				<thead><tr><th>{tr}Show{/tr}</th><th>{tr}Seasons{/tr}</th><th>{tr}Seasons with credits{/tr}</th><th>{tr}Credit rows{/tr}</th><th>{tr}Not linked yet{/tr}</th></tr></thead>
 				<tbody>
