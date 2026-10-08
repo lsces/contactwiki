@@ -272,6 +272,119 @@ trait ContactWikiTrait {
 	}
 
 	/**
+	 * The storage-relative branch (storage/attachments/<id%1000>/<id>/) this contact's downloaded images live in.
+	 */
+	public function getExtraImageBranch(): string {
+		return \Bitweaver\Liberty\liberty_mime_get_storage_branch( [ 'attachment_id' => $this->mContentId ] );
+	}
+
+	/**
+	 * Make one of this contact's 'image' files its thumbnail: rebuild thumbs/ (avatar to extra-large) in the same storage branch from
+	 * it, replacing any set already there. The same hook, and the same thumbs/-beside-the-images layout, FisheyeFilm uses - edit_xref.php
+	 * calls it for "Set as Thumbnail".
+	 *
+	 * @param string $pRelativePath  an 'image' xref row's xkey_ext (a bare filename)
+	 */
+	public function promoteImageToThumbnail( string $pRelativePath ): bool {
+		global $gBitSystem;
+		$source = $this->getExtraImagePath( $pRelativePath );
+		if( $pRelativePath === '' || !is_file( $source ) ) {
+			return false;
+		}
+		foreach( glob( $this->getExtraImagePath( 'thumbs/*' ) ) ?: [] as $oldThumb ) {
+			@unlink( $oldThumb );
+		}
+		$hash = [
+			'source_file' => $source,
+			'dest_branch' => $this->getExtraImageBranch(),
+			'type'        => $gBitSystem->verifyMimeType( $source ) ?: 'image/jpeg',
+		];
+		// A scan or archive photo can be bigger than ImageMagick's policy allows the thumbnailer to open (8000 px a side) - shrink it first, by asking the decoder to scale down as it reads (JPEG only - the policy is the machine's, not ours to raise).
+		$shrunk = null;
+		$dims = @getimagesize( $source );
+		if( $dims && max( $dims[0], $dims[1] ) > 6000 && class_exists( '\Imagick' ) ) {
+			try {
+				$im = new \Imagick();
+				// jpeg:size makes the decoder scale down while reading, so the full-size image is never opened (the policy limit is on the opened size).
+				$im->setOption( 'jpeg:size', '4000x4000' );
+				$im->readImage( $source.'[0]' );
+				$im->thumbnailImage( 3000, 3000, true );
+				$im->setImageFormat( 'jpeg' );
+				$shrunk = tempnam( sys_get_temp_dir(), 'cwphoto_' );
+				$im->writeImage( 'jpeg:'.$shrunk );
+				$hash['source_file'] = $shrunk;
+				$hash['type'] = 'image/jpeg';
+			} catch( \Exception $e ) {
+				// leave the original as the source; the thumbnailer will report its own failure
+			}
+		}
+		\Bitweaver\Liberty\liberty_generate_thumbnails( $hash );
+		if( $shrunk ) {
+			@unlink( $shrunk );
+		}
+		return $this->hasThumbnails();
+	}
+
+	public function hasThumbnails(): bool {
+		return !empty( glob( $this->getExtraImagePath( 'thumbs/small.*' ) ) );
+	}
+
+	/**
+	 * A downloaded photo becomes the thumbnail only while the contact has none - a later download never replaces one somebody chose.
+	 */
+	protected function thumbnailIfNone( string $pRelativePath ): void {
+		if( !$this->hasThumbnails() ) {
+			$this->promoteImageToThumbnail( $pRelativePath );
+		}
+	}
+
+	/** The thumbs/ file for lists and cards (getThumbnailUri()), else whatever the content type shows by default. */
+	public static function getThumbnailUrlFromHash( array &$pMixed, string $pSize = 'small', ?int $pSecondaryId = null, ?int $pDefault = null ): string {
+		if( !empty( $pMixed['content_id'] ) ) {
+			$branch = \Bitweaver\Liberty\liberty_mime_get_storage_branch( [ 'attachment_id' => $pMixed['content_id'], 'create_dir' => false ] );
+			if( $found = glob( STORAGE_PKG_PATH.$branch.'thumbs/'.basename( $pSize ).'.*' ) ) {
+				return STORAGE_PKG_URL.$branch.'thumbs/'.basename( $found[0] );
+			}
+		}
+		return parent::getThumbnailUrlFromHash( $pMixed, $pSize, $pSecondaryId, $pDefault );
+	}
+
+	// ---- The generic xref file hooks liberty/add_xref.php and edit_xref.php call (the same set FisheyeFilm has), so the Images tab can add, replace and delete files.
+
+	public function addImageXrefFile( string $pTmpPath, string $pOriginalName ): ?string {
+		$imagesDir = $this->getExtraImagePath( '' );
+		KernelTools::mkdir_p( $imagesDir );
+		$baseName = preg_replace( '/[^A-Za-z0-9]+/', '_', $this->getTitle() ) ?: 'image';
+		$ext = strtolower( pathinfo( $pOriginalName, PATHINFO_EXTENSION ) ) ?: 'jpg';
+		$n = 1;
+		do {
+			$fileName = "$baseName-manual-$n.$ext";
+			$n++;
+		} while( is_file( $imagesDir.$fileName ) );
+		if( !move_uploaded_file( $pTmpPath, $imagesDir.$fileName ) ) {
+			return null;
+		}
+		@chmod( $imagesDir.$fileName, 0644 );
+		$this->thumbnailIfNone( $fileName );
+		return $fileName;
+	}
+
+	public function replaceXrefFile( string $pItem, string $pXkeyExt, string $pTmpPath ): bool {
+		if( $pItem !== 'image' || $pXkeyExt === '' || basename( $pXkeyExt ) !== $pXkeyExt ) {
+			return false;
+		}
+		return move_uploaded_file( $pTmpPath, $this->getExtraImagePath( $pXkeyExt ) );
+	}
+
+	public function deleteXrefFile( string $pItem, string $pXkeyExt ): bool {
+		if( $pItem !== 'image' || $pXkeyExt === '' || basename( $pXkeyExt ) !== $pXkeyExt ) {
+			return false;
+		}
+		$path = $this->getExtraImagePath( $pXkeyExt );
+		return is_file( $path ) && @unlink( $path );
+	}
+
+	/**
 	 * Download a Commons photo (the cache first, see WikimediaCache) into this contact's own image folder and record it as its 'image' xref.
 	 *
 	 * @return bool  false if the download failed
@@ -290,6 +403,7 @@ trait ContactWikiTrait {
 			$storedName = 'wikidata.'.$realExt;
 		}
 		$this->upsertXref( $this->mContentId, 'image', [ 'xkey_ext' => $storedName ] );
+		$this->thumbnailIfNone( $storedName );
 		return true;
 	}
 
@@ -1141,6 +1255,7 @@ trait ContactWikiTrait {
 				KernelTools::mkdir_p( $imagesDir );
 				if( file_put_contents( $imagesDir.'tmdb.jpg', $image ) !== false ) {
 					$this->upsertXref( $this->mContentId, 'image', [ 'xkey_ext' => 'tmdb.jpg' ] );
+					$this->thumbnailIfNone( 'tmdb.jpg' );
 					$items[] = KernelTools::tra( 'Image' ).' (TMDb)';
 				}
 			}

@@ -118,14 +118,14 @@ class ContactWikiGroup extends ContactBusiness {
 	}
 
 	/**
-	 * Storage location for this Contact's own downloaded images (Wikidata's P18, currently the
-	 * only source) - see ContactWikiIndividual::getExtraImagePath()'s own docblock, identical
-	 * reasoning.
+	 * Storage location for this Contact's own downloaded images (Wikidata's P18 or a TMDb profile
+	 * photo) - the base storage/attachments/<id%1000>/<id>/ branch every other content type uses
+	 * (see getExtraImageBranch()), with the generated thumbs/ set alongside the original.
 	 *
 	 * @return string
 	 */
 	public function getExtraImagePath( string $pRelativePath ): string {
-		return CONTACT_IMPORT_PATH.\Bitweaver\Liberty\liberty_mime_get_storage_branch( [ 'attachment_id' => $this->mContentId ] ).$pRelativePath;
+		return STORAGE_PKG_PATH.$this->getExtraImageBranch().$pRelativePath;
 	}
 
 	// P31 (instance of) claims on this entity, as Q-ids - see ContactWikiTrait::itemClaimQids() for

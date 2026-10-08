@@ -456,6 +456,10 @@ exhaustive - add a Q-id when a real contact shows it's missing.
 - A home for place of birth/death and date of death beyond the `dod` xref (DOB is
   `liberty_content.event_time`).
 
+## Contact images
+
+A contact's downloaded images (Wikidata P18, a TMDb profile photo, anything added on the Images tab) live in the base `storage/attachments/<id%1000>/<id>/` branch, the same place films, seasons and shows keep theirs, with `thumbs/` (avatar to extra-large) beside them. The Images tab is the media types' one: Add Image, replace, archive, hard delete and "Set as Thumbnail" go through the same generic hooks (`addImageXrefFile()`, `replaceXrefFile()`, `deleteXrefFile()`, `promoteImageToThumbnail()` in `ContactWikiTrait`), and `getThumbnailUri()` reads `thumbs/`. A downloaded photo becomes the thumbnail only while the contact has none. JPEGs over 6000 px a side are decoded at reduced size first, because ImageMagick's policy refuses to open anything over 8000 px; a TIFF that large cannot be thumbnailed.
+
 ## Lazy biography and photo
 
 Bulk creation (the film/TV people pass) leaves the Wikipedia biography and the Commons photo out by default - they are the slow, throttled
