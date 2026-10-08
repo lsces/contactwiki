@@ -281,6 +281,16 @@ trait ContactWikiTrait {
 	}
 
 	/**
+	 * Rewrite just the stored title (keeping the description, so the search index is rebuilt from the right text) through the plain
+	 * LibertyContent save - the name parts and xrefs a full Contact save rebuilds are left alone. Used to repair a title damaged by a
+	 * save that passed a display string.
+	 */
+	public function saveStoredTitle( string $pTitle ): bool {
+		$hash = [ 'content_id' => $this->mContentId, 'title' => $pTitle, 'edit' => $this->mInfo['data'] ?? '' ];
+		return (bool)\Bitweaver\Liberty\LibertyContent::store( $hash );
+	}
+
+	/**
 	 * The storage-relative branch (storage/attachments/<id%1000>/<id>/) this contact's downloaded images live in.
 	 */
 	public function getExtraImageBranch(): string {
