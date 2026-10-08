@@ -441,9 +441,9 @@ exhaustive - add a Q-id when a real contact shows it's missing.
   clients to identify themselves; without it, long runs are throttled sooner.
 - `contactwiki_tmdb_token` - TMDb API Read Access Token. Used by the film and TV people tools (who a credited name is on TMDb, contacts for people
   Wikidata lacks); without it they cannot look anyone up.
-- `contactwiki_photo_width` - **Photo width (pixels)**, default 400 (the size fisheyemedia stores its stills at): Commons sends a copy resized to this width
+- `contactwiki_photo_width` - **Photo width (pixels)**, default 1024: Commons sends a copy resized to this width
   (`commonsPhotoUrl()`) instead of the original upload; a smaller image is never enlarged; `original` fetches the file as uploaded. The first 645 photos
-  fetched without a cap totalled 1.25 GB (230 over 1 MB, the largest 171 MB); at 400 px a typical portrait is ~125 KB. Applies to photos fetched from now on.
+  fetched without a cap totalled 1.25 GB (230 over 1 MB, the largest 171 MB); at 1024 px a typical portrait is a few hundred KB. Applies to photos fetched from now on; the early oversized ones were shrunk in place to this width (`~/scripts/contact-photo-shrink.php`, one-off).
   A re-rendered file (Commons turns an SVG/TIFF into PNG/JPEG) is stored under its real extension (`imageExtensionOf()`). Loading better-quality or
   alternative images is intended as a later action on the contact's edit page.
 

@@ -2016,7 +2016,7 @@ trait ContactWikiTrait {
 	/**
 	 * Where a Commons photo is fetched from: Special:FilePath with a width, so Commons sends a resized copy rather than the
 	 * original (press photos run to many megabytes - the first 645 stored averaged 1.9 MB, the largest was 171 MB). Width
-	 * is the contactwiki_photo_width setting, default 400 (the size fisheyemedia stores its stills at); 'original' fetches the file as uploaded. Commons never upscales
+	 * is the contactwiki_photo_width setting, default 1024; 'original' fetches the file as uploaded. Commons never upscales
 	 * (a smaller image comes back unchanged) and renders SVG/TIFF as a raster, so the stored type can differ from the name
 	 * (see imageExtensionOf()). Better quality can be loaded later from a contact's edit page.
 	 */
@@ -2027,7 +2027,7 @@ trait ContactWikiTrait {
 		if( $width === 'original' ) {
 			return $url;
 		}
-		return $url.'?width='.( ctype_digit( $width ) && (int)$width >= 100 ? min( (int)$width, 4000 ) : 400 );
+		return $url.'?width='.( ctype_digit( $width ) && (int)$width >= 100 ? min( (int)$width, 4000 ) : 1024 );
 	}
 
 	/** The file extension for what an image file really is (Commons may re-render a TIFF or SVG as JPEG/PNG), or null if unknown. */

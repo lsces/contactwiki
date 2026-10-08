@@ -23,7 +23,7 @@ $formContactWikiGeneral = [
 	"contactwiki_photo_width" => [
 		'heading' => 'Contact photos from Wikimedia Commons',
 		'label'   => 'Photo width (pixels)',
-		'note'    => 'Commons sends a copy resized to this width instead of the original upload (press photos run to many megabytes). Blank means 400 (the size the media library stores its stills at); a smaller image is never enlarged; the word "original" fetches the file exactly as uploaded. Applies to photos fetched from now on - an existing contact keeps its photo until it is reloaded from Wikidata.',
+		'note'    => 'Commons sends a copy resized to this width instead of the original upload (press photos run to many megabytes). Blank means 1024; a smaller image is never enlarged; the word "original" fetches the file exactly as uploaded. Applies to photos fetched from now on - an existing contact keeps its photo until it is reloaded from Wikidata.',
 		'type'    => 'text',
 	],
 ];
