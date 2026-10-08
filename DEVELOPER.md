@@ -492,3 +492,11 @@ that links only that person's films' unlinked credit rows (`FisheyeCredits::surv
 person instead still links all of the name's credits to them, as before; a TMDb duplicate of one person (same Wikidata item) is not a split.
 Films the TMDb lookup did not reach (it looks at up to 6 per name) stay unlinked for a later pass. Film scope only; TV already treats one name in
 one show as one person.
+
+## Merged Wikidata items
+A merged Wikidata item redirects: `Special:EntityData/<old>.json` answers with the item it became, keyed by the NEW id, so looking the entity up under
+the old id found nothing ("Could not fetch that Wikidata entity" - Dante Harper, whose TMDb external id still held Q113514854, now Q95865009).
+`fetchWikidataEntity()` and `prefetchWikidata()` now take the single entity returned when the requested id is absent (cached under both ids);
+`createFromWikidata()` then works under the entity's own `id` (and returns the contact that already holds it, if any). The film people page links
+credits with the contact's own Wikidata id, and `FisheyeCredits::syncLinkKeys()` (run on each page load) rewrites any linked credit's key that
+no longer matches its contact's Wikidata id - the key is how the characters pass finds a cast row's actor.

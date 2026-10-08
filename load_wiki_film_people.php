@@ -96,6 +96,8 @@ $surveyFn = function() use ( $scope, $contentIds ): array {
 };
 
 $nameIndex = ContactWikiIndividual::nameIndex();
+// A linked credit's key is its contact's Wikidata id; make any that disagree (an item merged since, a contact edited) agree again.
+FisheyeCredits::syncLinkKeys();
 
 /** The contacts a credited name could be, from the name index. */
 $candidatesFor = function( string $pName ) use ( $nameIndex ): array {
@@ -312,7 +314,8 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		if( $also ) {
 			$gContent->addTmdbAliases( $also );
 		}
-		$linkQid = $qid !== '' ? $qid : $gContent->getWikidataQid();
+		// The contact's own current Wikidata id (a merged item's old id is what TMDb and old links still hold).
+		$linkQid = $gContent->getWikidataQid() ?: $qid;
 		$rows = FisheyeFilm::linkCreditRows( $person['unlinked_ids'], (int)$gContent->mContentId, $linkQid );
 		$createResult['rows'] += $rows;
 		$entry = [ 'name' => $person['name'], 'title' => $gContent->getTitle(), 'rows' => $rows, 'view_url' => $gContent->getDisplayUrl(),

@@ -1197,6 +1197,15 @@ trait ContactWikiTrait {
 		if( !$entity ) {
 			return [ 'error' => KernelTools::tra( 'Could not fetch that Wikidata entity.' ).' ('.$pQid.')' ];
 		}
+		// A merged item arrives under its new id: the contact is made for (or found by) that one.
+		if( !empty( $entity['id'] ) && (string)$entity['id'] !== $pQid ) {
+			$pQid = (string)$entity['id'];
+			if( $held = self::findContactByWikidataQid( $pQid ) ) {
+				$existing = new static( null, (int)$held['content_id'] );
+				$existing->load();
+				return [ 'content' => $existing ];
+			}
+		}
 		$label = self::entityLabel( $entity );
 		if( $label === '' ) {
 			return [ 'error' => KernelTools::tra( 'That Wikidata item has no name in any language.' ).' ('.$pQid.')' ];
@@ -1560,8 +1569,16 @@ trait ContactWikiTrait {
 		}
 		$data = json_decode( $json, true );
 		$entity = $data['entities'][$pQid] ?? null;
+		if( !$entity && count( $data['entities'] ?? [] ) === 1 ) {
+			// A merged item: Wikidata redirects it and answers with the item it became, keyed by the new id (the stale id is
+			// still what TMDb's external ids and old links hold). The entity's own 'id' is the one to use from here on.
+			$entity = reset( $data['entities'] );
+		}
 		if( $entity ) {
 			WikimediaCache::putEntity( $pQid, $entity );
+			if( !empty( $entity['id'] ) ) {
+				WikimediaCache::putEntity( (string)$entity['id'], $entity );
+			}
 		}
 		return $entity;
 	}
@@ -1591,9 +1608,13 @@ trait ContactWikiTrait {
 			if( $result['status'] !== 200 ) {
 				$stats['refused'][$result['status']] = ( $stats['refused'][$result['status']] ?? 0 ) + 1;
 			}
-			$entity = $result['status'] === 200 ? ( json_decode( (string)$result['body'], true )['entities'][$qid] ?? null ) : null;
+			$entities = $result['status'] === 200 ? ( json_decode( (string)$result['body'], true )['entities'] ?? [] ) : [];
+			$entity = $entities[$qid] ?? ( count( $entities ) === 1 ? reset( $entities ) : null );   // a merged item answers under its new id
 			if( $entity ) {
 				WikimediaCache::putEntity( $qid, $entity );
+				if( !empty( $entity['id'] ) ) {
+					WikimediaCache::putEntity( (string)$entity['id'], $entity );
+				}
 				$stats['entities']++;
 			}
 		}
