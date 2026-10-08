@@ -455,3 +455,12 @@ exhaustive - add a Q-id when a real contact shows it's missing.
   group's Wikidata claims.
 - A home for place of birth/death and date of death beyond the `dod` xref (DOB is
   `liberty_content.event_time`).
+
+## Lazy biography and photo
+
+Bulk creation (the film/TV people pass) leaves the Wikipedia biography and the Commons photo out by default - they are the slow, throttled
+Wikimedia requests (`Fetch biographies too` / `Fetch photos too` on the page turn them back on; `ContactWikiTrait::$skipBiography` /
+`$skipPhotos`). `ContactWikiTrait::fillMissingFromWikidata()` loads whatever is missing from the contact's stored Wikidata entity (a
+biography only if the entity has an English Wikipedia article, a photo only if it has P18, so nothing is fetched for a contact with
+neither) and is called from `view.php` for users who can edit (`p_contact_update` or admin) - a visitor's view never fetches. A refused or
+failed request stores nothing, so the next editor view tries again. `load_wiki_photos.php` still fills photos in bulk.

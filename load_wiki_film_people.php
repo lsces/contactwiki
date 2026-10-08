@@ -229,6 +229,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 		'kinds' => [ 'wikidata' => 0, 'tmdb' => 0, 'nameonly' => 0, 'existing' => 0 ] ];
 	$createStarted = microtime( true );
 	ContactWikiIndividual::$skipPhotos = empty( $_REQUEST['photos'] );
+	ContactWikiIndividual::$skipBiography = empty( $_REQUEST['bios'] );
 	$survey = $surveyFn();
 	$picks = (array)( $_REQUEST['pick'] ?? [] );
 	$attempted = 0;

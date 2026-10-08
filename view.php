@@ -37,6 +37,16 @@ if( $gContent->isCommentable() ) {
 	}
 }
 
+// A contact created in bulk has no biography or photo yet (those are the slow, throttled Wikimedia requests): the first time someone
+// who can edit it opens the page, load what its stored Wikidata entity has. Visitors never trigger a fetch.
+global $gBitUser;
+if( ( $gBitUser->isAdmin() || $gBitUser->hasPermission( 'p_contact_update' ) ) && method_exists( $gContent, 'fillMissingFromWikidata' ) ) {
+	$filled = $gContent->fillMissingFromWikidata();
+	if( $filled['bio'] || $filled['photo'] ) {
+		$gContent->load();
+	}
+}
+
 $gBitSmarty->assign( 'gXrefInfo', $gContent->mXrefInfo );
 $gContent->assignViewVars( $gBitSmarty );
 

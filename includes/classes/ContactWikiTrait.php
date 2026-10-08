@@ -95,6 +95,9 @@ trait ContactWikiTrait {
 	 */
 	abstract protected function biographyDateProps(): array;
 
+	/** @var bool a bulk pass can leave biographies out too: none is fetched, and one the prefetch did not already hold is skipped (loaded when an editor first opens the contact - see fillMissingFromWikidata()). */
+	public static bool $skipBiography = false;
+
 	/** @var bool a bulk pass can leave photos out: none is fetched, and one the prefetch did not already hold is skipped (a contact's own Reload from Wikidata loads it later). */
 	public static bool $skipPhotos = false;
 
@@ -227,6 +230,40 @@ trait ContactWikiTrait {
 		self::stepDone( 'photo', $t );
 
 		return [ 'items' => $items ];
+	}
+
+	/**
+	 * Load what a contact is still missing from its stored Wikidata entity - the Wikipedia biography and the Commons photo - without the
+	 * full reload: bulk creation leaves them out (they are the slow, throttled part), and this is called when an editor first opens the
+	 * contact. Nothing is fetched unless the stored entity says there is something to fetch (an English Wikipedia article / a P18 image),
+	 * so a contact with neither costs a database read only. A refused or failed request stores nothing, so the next view tries again.
+	 *
+	 * @return array{bio:bool, photo:bool}  what was loaded
+	 */
+	public function fillMissingFromWikidata(): array {
+		global $gBitDb;
+		$ret = [ 'bio' => false, 'photo' => false ];
+		if( !$this->isValid() ) {
+			return $ret;
+		}
+		$needBio = trim( (string)( $this->mInfo['data'] ?? '' ) ) === '';
+		$needPhoto = !(int)$gBitDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] );
+		if( !$needBio && !$needPhoto ) {
+			return $ret;
+		}
+		$json = $gBitDb->getOne( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'wikidata' AND `end_date` IS NULL", [ $this->mContentId ] );
+		$entity = $json ? json_decode( (string)$json, true ) : null;
+		if( !is_array( $entity ) ) {
+			return $ret;
+		}
+		if( $needBio && ( $title = self::wikipediaTitle( $entity ) ) !== null && ( $bio = self::fetchWikipediaSummary( $title ) ) !== null ) {
+			$bioHash = [ 'content_id' => $this->mContentId, 'edit' => self::plainTextToHtmlParagraphs( $bio ) ];
+			$ret['bio'] = (bool)\Bitweaver\Liberty\LibertyContent::store( $bioHash );
+		}
+		if( $needPhoto && ( $file = self::imageFilename( $entity ) ) !== null ) {
+			$ret['photo'] = $this->storeCommonsPhoto( $file );
+		}
+		return $ret;
 	}
 
 	/**
@@ -1129,7 +1166,7 @@ trait ContactWikiTrait {
 		// The Wikipedia text goes in with the contact's first save, rather than a second full save of the contact afterwards.
 		$t = microtime( true );
 		$wikiTitle = self::wikipediaTitle( $entity );
-		$bio = $wikiTitle !== null ? self::fetchWikipediaSummary( $wikiTitle ) : null;
+		$bio = $wikiTitle !== null && ( !self::$skipBiography || WikimediaCache::getSummary( $wikiTitle ) !== null ) ? self::fetchWikipediaSummary( $wikiTitle ) : null;
 		if( $bio !== null ) {
 			$storeHash['edit'] = self::plainTextToHtmlParagraphs( $bio );
 		}
@@ -1138,7 +1175,7 @@ trait ContactWikiTrait {
 			return [ 'error' => implode( '; ', $gContent->mErrors ) ];
 		}
 		self::stepDone( 'contact store', $t );
-		$gContent->reloadFromWikidata( $pQid, $bio !== null );
+		$gContent->reloadFromWikidata( $pQid, $bio !== null || self::$skipBiography );
 		return [ 'content' => $gContent ];
 	}
 
@@ -1502,7 +1539,7 @@ trait ContactWikiTrait {
 		$requests = [];
 		foreach( array_values( array_unique( array_filter( $pQids, fn( $q ) => WikimediaCache::hasEntity( (string)$q ) ) ) ) as $qid ) {
 			$entity = WikimediaCache::getEntity( $qid );
-			if( ( $title = self::wikipediaTitle( $entity ) ) !== null && WikimediaCache::getSummary( $title ) === null ) {
+			if( !self::$skipBiography && ( $title = self::wikipediaTitle( $entity ) ) !== null && WikimediaCache::getSummary( $title ) === null ) {
 				$requests['s:'.$title] = 'https://en.wikipedia.org/api/rest_v1/page/summary/'.rawurlencode( $title );
 			}
 			if( !self::$skipPhotos && ( $file = self::imageFilename( $entity ) ) !== null && WikimediaCache::getImage( $file ) === null ) {
