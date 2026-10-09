@@ -11,13 +11,13 @@
 
 		{if $scope == 'tv' && !$program}
 			<p>{tr}Pick a show (or open this from a show's own page). Reload it from Plex to build its credits from the episodes, then its people are matched to contacts or created.{/tr}</p>
-			{if $finishedCount}<p class="text-muted">{$finishedCount} {tr}finished shows (credits built, none left unlinked){/tr} {if $showAll}{tr}are listed below.{/tr} <a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv">{tr}Hide them{/tr}</a>{else}{tr}are hidden.{/tr} <a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv&amp;all=1">{tr}Show them{/tr}</a>{/if}</p>{/if}
+			{if $finishedCount}<p class="text-muted">{$finishedCount} {tr}finished shows (credits built and none left unlinked, or marked finished){/tr} {if $showAll}{tr}are listed below.{/tr} <a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv">{tr}Hide them{/tr}</a>{else}{tr}are hidden.{/tr} <a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv&amp;all=1">{tr}Show them{/tr}</a>{/if}</p>{/if}
 			<table class="table table-condensed">
 				<thead><tr><th>{tr}Show{/tr}</th><th>{tr}Seasons{/tr}</th><th>{tr}Seasons with credits{/tr}</th><th>{tr}Credit rows{/tr}</th><th>{tr}Not linked yet{/tr}</th></tr></thead>
 				<tbody>
 					{foreach from=$programs item=prog}
 						<tr>
-							<td><a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv&amp;program_id={$prog.content_id}">{$prog.title|escape}</a></td>
+							<td><a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?scope=tv&amp;program_id={$prog.content_id}">{$prog.title|escape}</a>{if $markedDone[$prog.content_id]} <span class="text-muted">({tr}marked finished{/tr})</span>{/if}</td>
 							<td>{$prog.seasons}</td>
 							<td>{$prog.built}</td>
 							<td>{$prog.credits}</td>
@@ -106,6 +106,14 @@
 				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
 					{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
 					<input type="submit" class="btn btn-default" name="fReload" value="{tr}Reload from Plex{/tr}" title="{tr}Refreshes every season's episode details and full cast from Plex (thumbnails are kept) and rebuilds the show's credits{/tr}" />
+				{/form}
+				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+					{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
+					{if $programMarkedDone}
+						<input type="submit" class="btn btn-default" name="fReopen" value="{tr}Reopen{/tr}" title="{tr}This show is marked finished and hidden from the picker; Reopen puts it back{/tr}" />
+					{else}
+						<input type="submit" class="btn btn-default" name="fMarkDone" value="{tr}Mark show finished{/tr}" title="{tr}Take this show off the picker - for one whose people are dealt with but never reach 0 unlinked (a director left as plain text, or no people in Plex){/tr}" />
+					{/if}
 				{/form}
 				{if $linkableCharacters}
 					<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_characters.php?program_id={$program.content_id}" title="{tr}Review this show's recurring roles and make a character contact for each (also links the characters Wikidata knows){/tr}">{tr}Characters{/tr} ({$linkableCharacters})</a>

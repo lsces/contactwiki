@@ -60,13 +60,29 @@ const LOAD_WIKI_FILM_PEOPLE_TIME_BUDGET = 40;
 $scope = ( $_REQUEST['scope'] ?? '' ) === 'tv' ? 'tv' : 'film';
 $programId = $scope === 'tv' ? (int)( $_REQUEST['program_id'] ?? 0 ) : 0;
 
+// "Mark finished" / "Reopen": a show whose people are dealt with but never reach 0 unlinked (a documentary's director left as plain text, a show Plex
+// holds no people for) is taken off the picker by hand - a content preference on the show, no schema.
+const LOAD_WIKI_PEOPLE_DONE_PREF = 'contactwiki_people_done';
+if( $scope === 'tv' && $programId && ( !empty( $_REQUEST['fMarkDone'] ) || !empty( $_REQUEST['fReopen'] ) ) ) {
+	$gBitSystem->verifyPermission( 'p_contact_update' );
+	$programObject = \Bitweaver\Liberty\LibertyContent::getLibertyObject( $programId );
+	if( $programObject && $programObject->isValid() ) {
+		$programObject->storePreference( LOAD_WIKI_PEOPLE_DONE_PREF, !empty( $_REQUEST['fMarkDone'] ) ? 'y' : null );
+	}
+	if( !empty( $_REQUEST['fMarkDone'] ) ) {
+		KernelTools::bit_redirect( CONTACTWIKI_PKG_URL.'load_wiki_film_people.php?scope=tv' );
+	}
+}
+$markedDone = array_flip( array_map( 'intval', $gBitDb->getCol( "SELECT `content_id` FROM `".BIT_DB_PREFIX."liberty_content_prefs` WHERE `pref_name` = ? AND `pref_value` = 'y'", [ LOAD_WIKI_PEOPLE_DONE_PREF ] ) ?: [] ) );
+
 // TV with no show picked yet: the show picker, nothing else.
 if( $scope === 'tv' && !$programId ) {
 	$gBitSmarty->assign( 'scope', 'tv' );
-	// A finished show - credits built and none left unlinked - is hidden from the picker unless ?all=1 asks for the full list.
+	// A finished show - credits built and none left unlinked, or marked finished by hand - is hidden from the picker unless ?all=1 asks for the full list.
 	$allPrograms = FisheyeCredits::programOverview();
 	$showAll = !empty( $_REQUEST['all'] );
-	$finished = array_filter( $allPrograms, fn( $prog ) => $prog['built'] > 0 && $prog['credits'] > 0 && !$prog['unlinked'] );
+	$finished = array_filter( $allPrograms, fn( $prog ) => isset( $markedDone[$prog['content_id']] ) || ( $prog['built'] > 0 && $prog['credits'] > 0 && !$prog['unlinked'] ) );
+	$gBitSmarty->assign( 'markedDone', $markedDone );
 	$gBitSmarty->assign( 'programs', $showAll ? $allPrograms : array_values( array_diff_key( $allPrograms, $finished ) ) );
 	$gBitSmarty->assign( 'finishedCount', count( $finished ) );
 	$gBitSmarty->assign( 'showAll', $showAll );
@@ -568,6 +584,7 @@ if( $resolve ) {
 
 $gBitSmarty->assign( 'scope', $scope );
 $gBitSmarty->assign( 'program', $program );
+$gBitSmarty->assign( 'programMarkedDone', $programId && isset( $markedDone[$programId] ) );
 // Recurring roles still waiting for a character contact (what the Characters page's review list would offer) - the Characters button is only shown while there are some.
 $linkableCharacters = $scope === 'tv' && $programId ? count( FisheyeCredits::recurringCharacters( $programId ) ) : 0;
 $gBitSmarty->assign( 'linkableCharacters', $linkableCharacters );
