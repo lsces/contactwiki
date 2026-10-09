@@ -73,7 +73,7 @@ if( $scope === 'tv' && $programId && ( !empty( $_REQUEST['fMarkDone'] ) || !empt
 		KernelTools::bit_redirect( CONTACTWIKI_PKG_URL.'load_wiki_film_people.php?scope=tv' );
 	}
 }
-$markedDone = array_flip( array_map( 'intval', $gBitDb->getCol( "SELECT `content_id` FROM `".BIT_DB_PREFIX."liberty_content_prefs` WHERE `pref_name` = ? AND `pref_value` = 'y'", [ LOAD_WIKI_PEOPLE_DONE_PREF ] ) ?: [] ) );
+$markedDone = array_fill_keys( array_map( 'intval', $gBitDb->getCol( "SELECT `content_id` FROM `".BIT_DB_PREFIX."liberty_content_prefs` WHERE `pref_name` = ? AND `pref_value` = 'y'", [ LOAD_WIKI_PEOPLE_DONE_PREF ] ) ?: [] ), true );
 
 // TV with no show picked yet: the show picker, nothing else.
 if( $scope === 'tv' && !$programId ) {
