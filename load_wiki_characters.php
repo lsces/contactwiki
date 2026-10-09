@@ -143,8 +143,8 @@ if( !empty( $_REQUEST['fLoad'] ) ) {
 // ---- One show's recurring roles with no Wikidata character: a review list, then a character contact per ticked role (made from the role text).
 $roleGroups = [];
 $roleResult = null;
-$requestedMin = (int)( $_REQUEST['min'] ?? 3 );
-$minSeasons = in_array( $requestedMin, [ 2, 3, 4, 5, 8 ], true ) ? $requestedMin : 3;
+$requestedMin = (int)( $_REQUEST['min'] ?? 0 );
+$minSeasons = in_array( $requestedMin, [ 1, 2, 3, 4, 5, 8 ], true ) ? $requestedMin : ( $programId ? FisheyeCredits::defaultMinSeasons( $programId ) : 3 );
 $showTitle = '';
 if( $programId ) {
 	$showTitle = (string)$gBitDb->getOne( "SELECT `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $programId ] );

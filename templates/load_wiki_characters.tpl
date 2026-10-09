@@ -38,7 +38,7 @@
 			<h2>{tr}Recurring roles{/tr}: {$showTitle|escape}</h2>
 			<p>{tr}Run the Wikidata link above first - it gives the characters Wikidata holds their own item, and a role it linked drops out of this list. Roles Plex gives this show's cast that appear in at least{/tr} {$minSeasons} {tr}seasons and have no character contact yet. Ticking one makes a character contact named from the role (searchable by any word of it, and by the actor) and links every cast row for that role - across all seasons, and the shortened forms of it. Roles played by a different actor each time are probably a job, not a character, and are not ticked.{/tr}
 				{tr}Show roles in at least{/tr}
-				{foreach from=[2,3,4,5,8] item=m}{if $m == $minSeasons}<strong>{$m}</strong>{else}<a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_characters.php?program_id={$programId}&amp;min={$m}">{$m}</a>{/if} {/foreach}{tr}seasons{/tr}.</p>
+				{foreach from=[1,2,3,4,5,8] item=m}{if $m == $minSeasons}<strong>{$m}</strong>{else}<a href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_characters.php?program_id={$programId}&amp;min={$m}">{$m}</a>{/if} {/foreach}{tr}seasons{/tr}.</p>
 			{if $roleGroups}
 				{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_characters.php"}
 					<input type="hidden" name="program_id" value="{$programId}" /><input type="hidden" name="min" value="{$minSeasons}" />
