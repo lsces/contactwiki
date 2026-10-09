@@ -261,7 +261,7 @@
 												<br />{tr}Tick to create a contact for this person - choose which:{/tr}
 												{foreach from=$person.manual item=m name=man}
 													<br /><label><input type="radio" name="pick[{$person.key|escape}]" value="{$m.value|escape}" {if $smarty.foreach.man.first}checked="checked"{/if} />
-													{tr}Wikidata{/tr}: <a href="https://www.wikidata.org/wiki/{$m.qid|escape}" target="_blank" rel="noopener">{$m.label|escape} ({$m.qid|escape})</a>{if $m.description} - {$m.description|escape}{/if}{if $m.fit} <span class="text-success" title="{tr}the description fits the credited job{/tr}">&#10003;</span>{elseif $m.likely} <span class="text-muted">&#10003;</span>{/if}</label>
+													{tr}Wikidata{/tr}: <a href="https://www.wikidata.org/wiki/{$m.qid|escape}" target="_blank" rel="noopener">{$m.label|escape} ({$m.qid|escape})</a>{if $m.description} - {$m.description|escape}{/if}{if $m.matchType == 'alias'} <span class="text-muted" title="{tr}Wikidata matched the name on one of this item's other names, not its main label - often a maiden or stage name{/tr}">({tr}matched on the alias{/tr} &ldquo;{$m.matchedText|escape}&rdquo;)</span>{/if}{if $m.fit} <span class="text-success" title="{tr}the description fits the credited job{/tr}">&#10003;</span>{elseif $m.likely} <span class="text-muted">&#10003;</span>{/if}</label>
 												{/foreach}
 												{if $person.manualOther}
 													<br /><details><summary class="text-muted">{$person.manualOther|@count} {tr}other Wikidata items with this name - none looks like a film or TV job{/tr}</summary>

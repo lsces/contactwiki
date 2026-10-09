@@ -1117,8 +1117,9 @@ trait ContactWikiTrait {
 
 	public static function searchWikidataByName( string $pName, array $pRoles = [] ): array {
 		$context = stream_context_create( [ 'http' => [ 'header' => self::userAgentHeader(), 'timeout' => 15 ] ] );
+		// Explicit '&': BitSystem sets arg_separator.output to '&amp;', which would break every parameter after the first in an API URL.
 		$json = self::fetchExternal( 'https://www.wikidata.org/w/api.php?'.http_build_query( [
-			'action' => 'wbsearchentities', 'search' => $pName, 'language' => 'en', 'uselang' => 'en', 'type' => 'item', 'limit' => 8, 'format' => 'json' ] ), $context );
+			'action' => 'wbsearchentities', 'search' => $pName, 'language' => 'en', 'uselang' => 'en', 'type' => 'item', 'limit' => 8, 'format' => 'json' ], '', '&' ), $context );
 		if( $json === false ) {
 			return [];
 		}
@@ -1133,10 +1134,14 @@ trait ContactWikiTrait {
 			}
 			// Does the description fit the job they are credited with (a director credit prefers "television director")?
 			$fit = self::descriptionFitsRoles( $description, $pRoles );
+			// Wikidata says whether the name matched the item's label or only one of its aliases ("Louise Hooper" is an alias of Louise Wallace, born Hooper).
+			$matchType = (string)( $hit['match']['type'] ?? '' );
 			$found[] = [ 'qid' => $hit['id'], 'label' => (string)( $hit['label'] ?? $hit['id'] ), 'description' => $description, 'fit' => $fit,
+				'matchType' => $matchType, 'matchedText' => (string)( $hit['match']['text'] ?? '' ),
 				'likely' => (bool)preg_match( '/actor|actress|director|producer|writer|screenwriter|dramatist|playwright|television|film|comedian|presenter|novelist|cinematograph|editor|composer|journalist/i', $description ) ];
 		}
-		usort( $found, fn( $a, $b ) => [ $b['fit'], $b['likely'] ] <=> [ $a['fit'], $a['likely'] ] );
+		// The job fits first, then an item actually called this name over one that merely has it as an alias, then a screen-job description.
+		usort( $found, fn( $a, $b ) => [ $b['fit'], $b['matchType'] !== 'alias', $b['likely'] ] <=> [ $a['fit'], $a['matchType'] !== 'alias', $a['likely'] ] );
 		return $found;
 	}
 
