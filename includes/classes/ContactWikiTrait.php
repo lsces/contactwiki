@@ -1202,7 +1202,7 @@ trait ContactWikiTrait {
 		$parts = explode( ' ', trim( $pName ) );
 		$surname = array_pop( $parts ) ?: '';
 		// Someone who is only ever on screen as themselves (a "Self - Presenter") is not an Actor: no tag, so they list under Others.
-		$codes = [ 'star' => $pAsThemselves ? null : 'WP01', 'director' => 'WP02', 'writer' => 'WP07' ];
+		$codes = [ 'star' => $pAsThemselves ? 'WP99' : 'WP01', 'director' => 'WP02', 'writer' => 'WP07' ];
 		$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1,
 			'contact_types' => array_values( array_unique( array_filter( array_map( fn( $r ) => $codes[$r] ?? null, $pRoles ) ) ) ) ];
 		if( !$gContent->store( $storeHash ) ) {
@@ -1285,7 +1285,7 @@ trait ContactWikiTrait {
 		$parts = explode( ' ', $person['name'] );
 		$surname = array_pop( $parts ) ?: '';
 		// TMDb files a documentary participant under "Acting": when they are only ever on screen as themselves that is not an Actor tag.
-		$codes = [ 'Acting' => $pAsThemselves ? null : 'WP01', 'Directing' => 'WP02', 'Writing' => 'WP07' ];
+		$codes = [ 'Acting' => $pAsThemselves ? 'WP99' : 'WP01', 'Directing' => 'WP02', 'Writing' => 'WP07' ];
 		$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1,
 			'contact_types' => isset( $codes[$person['known_for']] ) ? [ $codes[$person['known_for']] ] : [] ];
 		if( !$gContent->store( $storeHash ) ) {

@@ -61,6 +61,22 @@ class ContactWikiIndividual extends ContactPerson {
 		'Q13219637' => 'WP06', // cellist
 		'Q2865819'  => 'WP06', // opera singer
 		'Q158852'   => 'WP08', // conductor
+		'Q1028181'  => 'WP10', // painter
+		'Q1281618'  => 'WP10', // sculptor
+		'Q33231'    => 'WP10', // photographer
+		'Q483501'   => 'WP10', // artist
+		'Q3391743'  => 'WP10', // visual artist
+		'Q36180'    => 'WP11', // writer
+		'Q6625963'  => 'WP11', // novelist
+		'Q49757'    => 'WP11', // poet
+		'Q1930187'  => 'WP11', // journalist
+		'Q201788'   => 'WP11', // historian
+		'Q42973'    => 'WP12', // architect
+		'Q81096'    => 'WP12', // engineer
+		'Q82955'    => 'WP13', // politician
+		'Q189290'   => 'WP13', // military officer
+		'Q42603'    => 'WP13', // priest
+		'Q43845'    => 'WP13', // businessperson
 	];
 
 	public function __construct( $pContactId = NULL, $pContentId = NULL ) {
