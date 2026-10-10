@@ -39,7 +39,7 @@ $seasonIds = $programId ? FisheyeCredits::seasonIdsForProgram( $programId ) : []
 $scopeSql = $programId
 	? ( $seasonIds ? "c.`content_id` IN ( ".implode( ',', array_map( 'intval', $seasonIds ) )." )" : "1 = 0" )
 	: "c.`content_id` IN ( SELECT `content_id` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_type_guid` = 'fisheyefilm' )";
-$unlinkedSql = "FROM `".BIT_DB_PREFIX."liberty_xref` c WHERE c.`item` = '".FisheyeCredits::CHARACTER_ITEM."' AND c.`end_date` IS NULL AND ( c.`xref` IS NULL OR c.`xref` = 0 ) AND $scopeSql";
+$unlinkedSql = "FROM `".BIT_DB_PREFIX."liberty_xref` c WHERE c.`item` = '".FisheyeCredits::CHARACTER_ITEM."' AND c.`end_date` IS NULL AND ( c.`xref` IS NULL OR c.`xref` = 0 ) AND ".FisheyeCredits::notSelfSql( 'c.`xkey_ext`' )." AND $scopeSql";
 $result = null;
 
 if( !empty( $_REQUEST['fLoad'] ) ) {
@@ -56,7 +56,7 @@ if( !empty( $_REQUEST['fLoad'] ) ) {
 		}
 		$rowsByFilm = FisheyeCredits::characterRowsForFilms( $filmIds );
 		// Only films with a cast row already linked to its actor can be matched.
-		$wanted = array_filter( $rowsByFilm, fn( $rows ) => (bool)array_filter( $rows, fn( $r ) => !$r['linked'] && $r['actor_qid'] ) );
+		$wanted = array_filter( $rowsByFilm, fn( $rows ) => (bool)array_filter( $rows, fn( $r ) => !$r['linked'] && $r['actor_qid'] && !$r['self'] ) );
 		// The Wikidata item(s) each film or season is matched through: a film's own item, or its show's series items.
 		$itemsFor = [];
 		if( $programId ) {
@@ -94,7 +94,7 @@ if( !empty( $_REQUEST['fLoad'] ) ) {
 		$contactFor = [];
 		foreach( $wanted as $filmId => $rows ) {
 			foreach( $rows as $row ) {
-				if( $row['linked'] || !$row['actor_qid'] || empty( $itemsFor[$filmId] ) ) {
+				if( $row['linked'] || $row['self'] || !$row['actor_qid'] || empty( $itemsFor[$filmId] ) ) {
 					continue;
 				}
 				$candidates = [];

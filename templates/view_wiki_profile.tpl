@@ -66,6 +66,12 @@
 				<ul>{foreach from=$characterLinks.played item=p}<li>{if $p.character_url}<a href="{$p.character_url|escape}">{$p.role|escape}</a>{else}{$p.role|escape}{/if} {tr}in{/tr} <a href="{$p.url|escape}">{$p.title|escape}</a></li>{/foreach}</ul>
 			</div>
 		{/if}
+		{if $characterLinks.appearances|@count}
+			<div class="wiki-profile-characters">
+				<h2>{tr}Appeared as themselves{/tr}</h2>
+				<ul>{foreach from=$characterLinks.appearances item=p}<li>{if $p.function}{$p.function|escape} {tr}in{/tr} {/if}<a href="{$p.url|escape}">{$p.title|escape}</a></li>{/foreach}</ul>
+			</div>
+		{/if}
 
 		{if $gMusicGallery && $gMusicGallery->mGalleryId}
 			<div class="wiki-profile-gallery">

@@ -104,6 +104,9 @@ if( $scope === 'tv' ) {
 	$contentIds = array_merge( [ $programId ], $seasonIds );
 }
 
+// What each person is on screen ("Master Carpenter" from a "Self - ..." role): for the Wikidata job fit and a name-only contact's description.
+$functionsByName = FisheyeCredits::functionsByActor( $contentIds );
+
 /** The credits survey for this page's scope, shaped as people[].films = the film/season titles. */
 $surveyFn = function() use ( $scope, $contentIds ): array {
 	if( $scope === 'film' ) {
@@ -331,6 +334,12 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			}
 			$gContent = $created['content'];
 			$wasCreated = true;
+			if( $qid === '' && !$tmdbId ) {
+				// A contact from the name alone has nothing else to say who it is: describe it from its credits ("Master Carpenter on This Old House").
+				$gContent->saveStoredDescription( ContactWikiIndividual::plainTextToHtmlParagraphs( FisheyeCredits::describeAppearances(
+					array_keys( $functionsByName[mb_strtolower( $person['name'] )] ?? [] ) ?: array_map( fn( $r ) => ucfirst( $r ), array_keys( $person['roles'] ) ),
+					array_values( $person['items'] ?? [] ) ) ) );
+			}
 		}
 		// The contact must carry the TMDb id it was found by (a Wikidata item reached through TMDb's own
 		// external ids may not hold P4985 yet), so the next credit of this person matches it.
@@ -475,7 +484,7 @@ if( $resolve ) {
 					'qid'      => $wd['qid'] ?? '',
 					'label'    => $wd['label'] ?? '',
 					'description' => $wd['description'] ?? '',
-					'fit'      => ContactWikiIndividual::descriptionFitsRoles( (string)( $wd['description'] ?? '' ), array_keys( $person['roles'] ) ),
+					'fit'      => ContactWikiIndividual::descriptionFitsRoles( (string)( $wd['description'] ?? '' ), array_keys( $person['roles'] ), array_keys( $functionsByName[mb_strtolower( $person['name'] )] ?? [] ) ),
 					'is_human' => $wd['is_human'] ?? true,
 					'statements' => (int)( $wd['statements'] ?? 0 ),
 					'sitelinks'  => (int)( $wd['sitelinks'] ?? 0 ),
@@ -558,7 +567,7 @@ if( $resolve ) {
 			$person['manual'] = [];
 			$person['manualOther'] = [];
 			if( $nameSearches++ < 12 ) {
-				foreach( ContactWikiIndividual::searchWikidataByName( $person['name'], array_keys( $person['roles'] ) ) as $candidate ) {
+				foreach( ContactWikiIndividual::searchWikidataByName( $person['name'], array_keys( $person['roles'] ), array_keys( $functionsByName[mb_strtolower( $person['name'] )] ?? [] ) ) as $candidate ) {
 					// An item whose description names a screen/writing job is offered; the rest (no description, or a psychiatrist) are kept
 					// behind a fold, so a common name does not bury the page in eight look-alikes and the name-only contact stays the default.
 					$person[$candidate['fit'] || $candidate['likely'] ? 'manual' : 'manualOther'][] = $candidate + [ 'value' => '0:'.$candidate['qid'] ];

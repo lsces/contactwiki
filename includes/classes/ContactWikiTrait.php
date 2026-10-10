@@ -904,7 +904,8 @@ trait ContactWikiTrait {
 	 * pre-selected. Disambiguation pages are dropped; a description that fits one of the credited roles marks the candidate 'fit' (listed first), one that
 	 * reads like any screen/writing job 'likely'.
 	 *
-	 * @param string[] $pRoles  the person's credit roles (director/writer/star/creator)
+	 * @param string[] $pRoles      the person's credit roles (director/writer/star/creator)
+	 * @param string[] $pFunctions  what they are on screen ("Master Carpenter" from a "Self - ..." role), matched against the description too
 	 * @return list<array{qid:string, label:string, description:string, fit:bool, likely:bool}>
 	 */
 	/** The type tag a character contact carries (a fictional character is a wiki individual with this type). */
@@ -1104,7 +1105,17 @@ trait ContactWikiTrait {
 	}
 
 	/** Does a Wikidata item's description fit one of the credited jobs (director/writer/star/creator)? */
-	public static function descriptionFitsRoles( string $pDescription, array $pRoles ): bool {
+	public static function descriptionFitsRoles( string $pDescription, array $pRoles, array $pFunctions = [] ): bool {
+		// A credit's own function ("Plumbing Contractor", "Architect") fits a description that names the same trade, so a tradesperson's
+		// Wikidata item is not ranked below a namesake who happens to be an actor. Word stems, generic modifiers left out.
+		$skip = [ 'self', 'and', 'the', 'master', 'head', 'senior', 'junior', 'general', 'chief', 'assistant', 'lead', 'principal', 'expert', 'consultant', 'contractor', 'with', 'for' ];
+		foreach( $pFunctions as $function ) {
+			foreach( preg_split( '/[^\p{L}]+/u', mb_strtolower( (string)$function ), -1, PREG_SPLIT_NO_EMPTY ) ?: [] as $word ) {
+				if( mb_strlen( $word ) >= 4 && !in_array( $word, $skip, true ) && preg_match( '/\b'.preg_quote( mb_substr( $word, 0, 5 ), '/' ).'/iu', $pDescription ) ) {
+					return true;
+				}
+			}
+		}
 		$patterns = [ 'director' => '/director/i', 'writer' => '/writer|screenwriter|dramatist|playwright|novelist|author/i',
 			'star' => '/actor|actress|performer|comedian|singer/i', 'narrator' => '/narrator|voice|broadcaster|presenter|actor|actress|journalist|naturalist|comedian/i', 'creator' => '/creator|producer|writer|screenwriter|director/i' ];
 		foreach( $pRoles as $role ) {
@@ -1115,7 +1126,7 @@ trait ContactWikiTrait {
 		return false;
 	}
 
-	public static function searchWikidataByName( string $pName, array $pRoles = [] ): array {
+	public static function searchWikidataByName( string $pName, array $pRoles = [], array $pFunctions = [] ): array {
 		$context = stream_context_create( [ 'http' => [ 'header' => self::userAgentHeader(), 'timeout' => 15 ] ] );
 		// Explicit '&': BitSystem sets arg_separator.output to '&amp;', which would break every parameter after the first in an API URL.
 		$json = self::fetchExternal( 'https://www.wikidata.org/w/api.php?'.http_build_query( [
@@ -1133,7 +1144,7 @@ trait ContactWikiTrait {
 				continue;
 			}
 			// Does the description fit the job they are credited with (a director credit prefers "television director")?
-			$fit = self::descriptionFitsRoles( $description, $pRoles );
+			$fit = self::descriptionFitsRoles( $description, $pRoles, $pFunctions );
 			// Wikidata says whether the name matched the item's label or only one of its aliases ("Louise Hooper" is an alias of Louise Wallace, born Hooper).
 			$matchType = (string)( $hit['match']['type'] ?? '' );
 			$found[] = [ 'qid' => $hit['id'], 'label' => (string)( $hit['label'] ?? $hit['id'] ), 'description' => $description, 'fit' => $fit,
