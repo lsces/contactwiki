@@ -584,9 +584,15 @@ trait ContactWikiTrait {
 	 * this). Word order is handled separately by nameForms().
 	 */
 	public static function normaliseName( string $pName ): string {
-		$name = function_exists( 'transliterator_transliterate' )
-			? (string)transliterator_transliterate( 'Any-Latin; Latin-ASCII; Lower()', $pName )
-			: strtolower( (string)iconv( 'UTF-8', 'ASCII//TRANSLIT', $pName ) );
+		// transliterator_transliterate() recompiles its rule string on every call (~0.2 ms): build the transliterator once, and skip it for plain ASCII.
+		static $transliterator = false;
+		if( !preg_match( '/[^\x00-\x7F]/', $pName ) ) {
+			$name = strtolower( $pName );
+		} elseif( class_exists( 'Transliterator' ) && ( $transliterator ?: ( $transliterator = \Transliterator::create( 'Any-Latin; Latin-ASCII; Lower()' ) ) ) ) {
+			$name = (string)$transliterator->transliterate( $pName );
+		} else {
+			$name = strtolower( (string)iconv( 'UTF-8', 'ASCII//TRANSLIT', $pName ) );
+		}
 		return trim( preg_replace( '/[^a-z0-9]+/', ' ', $name ) );
 	}
 
