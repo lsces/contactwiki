@@ -108,6 +108,7 @@ if( $scope === 'tv' ) {
 
 // What each person is on screen ("Master Carpenter" from a "Self - ..." role): for the Wikidata job fit and a name-only contact's description.
 $functionsByName = FisheyeCredits::functionsByActor( $contentIds );
+$rolesByName = FisheyeCredits::rolesByActor( $contentIds );   // every role text per person: who is only ever on screen as themselves is not tagged Actor
 
 /** The credits survey for this page's scope, shaped as people[].films = the film/season titles. */
 $surveyFn = function() use ( $scope, $contentIds ): array {
@@ -341,8 +342,9 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			$gContent = new ContactWikiIndividual( null, $contact['content_id'] );
 			$gContent->load();
 		} else {
+			$asThemselves = FisheyeCredits::appearsOnlyAsThemselves( $rolesByName[mb_strtolower( $person['name'] )] ?? [] );
 			$created = $qid !== '' ? ContactWikiIndividual::createFromWikidata( $qid, false )
-				: ( $tmdbId ? ContactWikiIndividual::createFromTmdb( $tmdbId ) : ContactWikiIndividual::createNameOnly( $person['name'], array_keys( $person['roles'] ) ) );
+				: ( $tmdbId ? ContactWikiIndividual::createFromTmdb( $tmdbId, $asThemselves ) : ContactWikiIndividual::createNameOnly( $person['name'], array_keys( $person['roles'] ), $asThemselves ) );
 			if( empty( $created['content'] ) ) {
 				$createResult['errors'][] = [ 'name' => $person['name'], 'error' => $created['error'] ];
 				continue;
@@ -352,7 +354,7 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			if( $qid === '' && !$tmdbId ) {
 				// A contact from the name alone has nothing else to say who it is: describe it from its credits ("Master Carpenter on This Old House").
 				$gContent->saveStoredDescription( ContactWikiIndividual::plainTextToHtmlParagraphs( FisheyeCredits::describeAppearances(
-					array_keys( $functionsByName[mb_strtolower( $person['name'] )] ?? [] ) ?: array_map( fn( $r ) => ucfirst( $r ), array_keys( $person['roles'] ) ),
+					array_keys( $functionsByName[mb_strtolower( $person['name'] )] ?? [] ) ?: array_map( fn( $r ) => $r === 'star' ? ( $asThemselves ? 'Appears' : 'Actor' ) : ucfirst( $r ), array_keys( $person['roles'] ) ),
 					array_values( $person['items'] ?? [] ) ) ) );
 			}
 		}

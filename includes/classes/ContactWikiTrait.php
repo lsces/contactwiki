@@ -1163,11 +1163,12 @@ trait ContactWikiTrait {
 	 * @param string[] $pRoles  the credit roles (director/writer/star)
 	 * @return array{content:object}|array{error:string}
 	 */
-	public static function createNameOnly( string $pName, array $pRoles ): array {
+	public static function createNameOnly( string $pName, array $pRoles, bool $pAsThemselves = false ): array {
 		$gContent = new ContactWikiIndividual();
 		$parts = explode( ' ', trim( $pName ) );
 		$surname = array_pop( $parts ) ?: '';
-		$codes = [ 'star' => 'WP01', 'director' => 'WP02', 'writer' => 'WP07' ];
+		// Someone who is only ever on screen as themselves (a "Self - Presenter") is not an Actor: no tag, so they list under Others.
+		$codes = [ 'star' => $pAsThemselves ? null : 'WP01', 'director' => 'WP02', 'writer' => 'WP07' ];
 		$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1,
 			'contact_types' => array_values( array_unique( array_filter( array_map( fn( $r ) => $codes[$r] ?? null, $pRoles ) ) ) ) ];
 		if( !$gContent->store( $storeHash ) ) {
@@ -1241,7 +1242,7 @@ trait ContactWikiTrait {
 	 *
 	 * @return array{content:object}|array{error:string}
 	 */
-	public static function createFromTmdb( int $pTmdbId ): array {
+	public static function createFromTmdb( int $pTmdbId, bool $pAsThemselves = false ): array {
 		$person = self::fetchTmdbPerson( $pTmdbId );
 		if( !$person ) {
 			return [ 'error' => KernelTools::tra( 'Could not fetch that TMDb person.' ).' ('.$pTmdbId.')'.( self::getLastFetchError() ? ' - '.self::getLastFetchError() : '' ) ];
@@ -1249,7 +1250,8 @@ trait ContactWikiTrait {
 		$gContent = new ContactWikiIndividual();
 		$parts = explode( ' ', $person['name'] );
 		$surname = array_pop( $parts ) ?: '';
-		$codes = [ 'Acting' => 'WP01', 'Directing' => 'WP02', 'Writing' => 'WP07' ];
+		// TMDb files a documentary participant under "Acting": when they are only ever on screen as themselves that is not an Actor tag.
+		$codes = [ 'Acting' => $pAsThemselves ? null : 'WP01', 'Directing' => 'WP02', 'Writing' => 'WP07' ];
 		$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1,
 			'contact_types' => isset( $codes[$person['known_for']] ) ? [ $codes[$person['known_for']] ] : [] ];
 		if( !$gContent->store( $storeHash ) ) {
