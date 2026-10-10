@@ -1104,6 +1104,40 @@ trait ContactWikiTrait {
 		return $json === false ? null : ( json_decode( $json, true )['results']['bindings'] ?? [] );
 	}
 
+	/**
+	 * Wikidata items for one person from ids another database gave: a Q-id itself and/or an IMDb name id (P345, nm...). Humans only.
+	 *
+	 * @param array{wikidata?:string, imdb?:string} $pIds
+	 * @return list<array{qid:string, label:string, description:string, is_human:bool, statements:int, sitelinks:int}>|null  null if Wikidata could not be asked
+	 */
+	public static function wikidataByExternalIds( array $pIds ): ?array {
+		$parts = [];
+		if( !empty( $pIds['wikidata'] ) && preg_match( '/^Q\d+$/', $pIds['wikidata'] ) ) {
+			$parts[] = '{ BIND( wd:'.$pIds['wikidata'].' AS ?item ) }';
+		}
+		if( !empty( $pIds['imdb'] ) && preg_match( '/^nm\d+$/', $pIds['imdb'] ) ) {
+			$parts[] = '{ ?item wdt:P345 "'.$pIds['imdb'].'" }';
+		}
+		if( !$parts ) {
+			return [];
+		}
+		$rows = self::wikidataSparql( 'SELECT DISTINCT ?item ?itemLabel ?desc ?st ?sl ?human WHERE { '.implode( ' UNION ', $parts ).' '
+			.'OPTIONAL { ?item schema:description ?desc . FILTER( LANG( ?desc ) = "en" ) } '
+			.'OPTIONAL { ?item wikibase:statements ?st ; wikibase:sitelinks ?sl . } '
+			.'BIND( EXISTS { ?item wdt:P31 wd:Q5 } AS ?human ) SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } }' );
+		if( $rows === null ) {
+			return null;
+		}
+		$ret = [];
+		foreach( $rows as $row ) {
+			if( preg_match( '#/(Q\d+)$#', $row['item']['value'] ?? '', $m ) && ( $row['human']['value'] ?? '' ) === 'true' ) {
+				$ret[$m[1]] = [ 'qid' => $m[1], 'label' => $row['itemLabel']['value'] ?? $m[1], 'description' => $row['desc']['value'] ?? '', 'is_human' => true,
+					'statements' => (int)( $row['st']['value'] ?? 0 ), 'sitelinks' => (int)( $row['sl']['value'] ?? 0 ) ];
+			}
+		}
+		return array_values( $ret );
+	}
+
 	/** Does a Wikidata item's description fit one of the credited jobs (director/writer/star/creator)? */
 	public static function descriptionFitsRoles( string $pDescription, array $pRoles, array $pFunctions = [] ): bool {
 		// A credit's own function ("Plumbing Contractor", "Architect") fits a description that names the same trade, so a tradesperson's

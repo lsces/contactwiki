@@ -270,7 +270,7 @@
 												<input type="hidden" name="pick[{$person.key|escape}]" value="{$person.options[0].value|escape}" />
 												{if $person.options[0].aliases}<input type="hidden" name="also[{$person.key|escape}]" value="{$person.options[0].aliases|@implode:','}" />{/if}
 											{elseif $person.status == 'choose' || $person.status == 'unresolved'}
-												<input type="checkbox" name="selected2[]" value="{$person.key|escape}" />
+												<input type="checkbox" name="selected2[]" value="{$person.key|escape}"{if $person.status == 'unresolved' && $person.recurring && !$person.manual} checked="checked"{/if} />
 											{/if}
 										</td>
 										<td>{$person.name|escape}</td>
@@ -278,7 +278,7 @@
 										<td>{foreach from=$person.film_titles item=title name=ft}{$title|escape}{if !$smarty.foreach.ft.last}; {/if}{/foreach}{if $person.more_films} <span class="text-muted"><span style="margin:0 0.4em;">...</span>{tr}and{/tr} {$person.more_films} {tr}more{/tr}</span>{/if}</td>
 										<td>
 											{if $person.status == 'unresolved'}
-												<span class="text-muted">{tr}Not resolved{/tr}: {$person.reason|escape}</span>
+												<span class="text-muted">{tr}Not resolved{/tr}: {$person.reason|escape}</span>{if $person.recurring && !$person.manual} <span class="text-success">({tr}recurs, so a name-only contact is pre-ticked{/tr})</span>{/if}
 												<br />{tr}Tick to create a contact for this person - choose which:{/tr}
 												{foreach from=$person.manual item=m name=man}
 													<br /><label><input type="radio" name="pick[{$person.key|escape}]" value="{$m.value|escape}" {if $smarty.foreach.man.first}checked="checked"{/if} />
@@ -314,7 +314,7 @@
 													{else}
 														{tr}Create from TMDb{/tr} <span class="text-muted">({tr}no Wikidata item{/tr}){if $o.details}: {$o.details.known_for|escape}{if $o.details.birthday}, {tr}born{/tr} {$o.details.birthday|escape}{/if}{/if}</span>
 													{/if}
-													{if $o.tmdb_id}<a class="small text-muted" href="https://www.themoviedb.org/person/{$o.tmdb_id}" target="_blank" rel="noopener">TMDb {$o.tmdb_id}</a>{/if}{if $o.from_series && !$o.era_warn} <span class="small text-success">({tr}in this show's Wikidata cast{/tr})</span>{/if}{if $o.era_warn} <span class="small text-danger"><strong>&#9888; {$o.era_warn|escape}</strong> - {tr}likely another series' credit mixed in by Plex{/tr}</span>{/if}
+													{if $o.tmdb_id}<a class="small text-muted" href="https://www.themoviedb.org/person/{$o.tmdb_id}" target="_blank" rel="noopener">TMDb {$o.tmdb_id}</a>{/if}{if $o.from_tvdb} <span class="small text-success">({tr}matched by the ids TheTVDB holds{/tr})</span>{/if}{if $o.from_series && !$o.era_warn} <span class="small text-success">({tr}in this show's Wikidata cast{/tr})</span>{/if}{if $o.era_warn} <span class="small text-danger"><strong>&#9888; {$o.era_warn|escape}</strong> - {tr}likely another series' credit mixed in by Plex{/tr}</span>{/if}
 													{if $o.aliases}<span class="small text-muted">({tr}same person, also{/tr} {foreach from=$o.aliases item=a name=al}<a href="https://www.themoviedb.org/person/{$a}" target="_blank" rel="noopener">TMDb {$a}</a>{if !$smarty.foreach.al.last}, {/if}{/foreach})</span>{/if}
 													{if $person.status == 'choose'}</label>{/if}
 												{/foreach}

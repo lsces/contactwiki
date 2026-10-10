@@ -54,6 +54,8 @@ const LOAD_WIKI_FILM_PEOPLE_BATCH = 100;
 // People looked up (TMDb credits, Wikidata, contact creation) per submit - each is several network
 // round trips, so a long list is done in small batches with a gap between creations, as the music pass does.
 const LOAD_WIKI_FILM_PEOPLE_LOOKUP_BATCH = 100;
+// Episodes a TV person must appear in before an unidentified name is pre-ticked for a name-only contact.
+const LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES = 3;
 const LOAD_WIKI_FILM_PEOPLE_GAP_US = 500000;
 // Wall-clock budget for one submit's creations. Production nginx cuts a request after 60s without a response, so a
 // run stops starting new people at this point and reports how many are left (they stay ticked for the next press).
@@ -577,6 +579,35 @@ if( $resolve ) {
 						? sprintf( KernelTools::tra( 'tied to this show on Wikidata only from %d - after its run ended in %d' ), $match['year'], $seriesPeriod['end'] ) : '' ];
 			}
 		}
+		// Still nothing: the ids TheTVDB holds for this person (it lists IMDb / TMDb / Wikidata ids on its own people records) are a
+		// far safer match than a name search - an IMDb id in particular is as reliable as a TMDb one.
+		if( !$person['options'] && $scope === 'tv' && class_exists( 'Bitweaver\\Fisheyemedia\\FisheyeTvdb' ) ) {
+			$ext = FisheyeTvdb::externalIdsFor( $programId, $person['name'] );
+			if( $ext ) {
+				$hits = ContactWikiIndividual::wikidataByExternalIds( $ext ) ?? [];
+				$tmdbExt = (int)( $ext['tmdb'] ?? 0 );
+				$details = null;
+				if( !$hits && $tmdbExt ) {
+					$details = ContactWikiIndividual::fetchTmdbPerson( $tmdbExt );
+					if( !empty( $details['wikidata_id'] ) && preg_match( '/^Q\d+$/', $details['wikidata_id'] ) ) {
+						$hits = ContactWikiIndividual::wikidataByExternalIds( [ 'wikidata' => $details['wikidata_id'] ] ) ?? [];
+					}
+				}
+				foreach( ( $hits ?: ( $tmdbExt ? [ null ] : [] ) ) as $wd ) {
+					$existing = ContactWikiIndividual::findContactByTmdbId( (string)$tmdbExt ) ?: ( $wd ? ContactWikiIndividual::findContactByWikidataQid( $wd['qid'] ) : null );
+					if( $tmdbExt === 0 ) {
+						$existing = $wd ? ContactWikiIndividual::findContactByWikidataQid( $wd['qid'] ) : null;
+					}
+					if( $existing ) {
+						$existing['view_url'] = CONTACTWIKI_PKG_URL.'view.php?content_id='.$existing['content_id'];
+					}
+					$person['options'][] = [ 'tmdb_id' => $tmdbExt, 'tmdb_name' => '', 'qid' => $wd['qid'] ?? '', 'label' => $wd['label'] ?? $person['name'], 'description' => $wd['description'] ?? '',
+						'fit' => $wd ? ContactWikiIndividual::descriptionFitsRoles( $wd['description'], array_keys( $person['roles'] ), array_keys( $functionsByName[mb_strtolower( $person['name'] )] ?? [] ) ) : false,
+						'is_human' => true, 'from_tmdb' => false, 'from_tvdb' => true, 'statements' => (int)( $wd['statements'] ?? 0 ), 'sitelinks' => (int)( $wd['sitelinks'] ?? 0 ),
+						'details' => $details, 'existing' => $existing, 'value' => $tmdbExt.':'.( $wd['qid'] ?? '' ) ];
+				}
+			}
+		}
 		if( !$person['options'] ) {
 			// Tagged in Plex but TMDb has no record: offer Wikidata items of that exact name (a person decides - none is pre-selected as a
 			// pick) and a contact from the name alone. Searches are capped per request so a show with many such people stays quick.
@@ -591,6 +622,8 @@ if( $resolve ) {
 				}
 			}
 			$person['status'] = 'unresolved';
+			// A TV person nothing identifies, but who recurs (3+ episodes), is worth a contact from the name; a one-off guest stays plain text.
+			$person['recurring'] = $scope === 'tv' && $person['episodes'] >= LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES;
 			$person['reason'] = !$tokenSet ? KernelTools::tra( 'No TMDb access token is set.' )
 				: ( !$person['tmdb_films'] ? ( $scope === 'tv' ? KernelTools::tra( 'This show has no TMDb id.' ) : KernelTools::tra( 'None of its films carries a TMDb id.' ) )
 				: ( $person['found']['error'] ? KernelTools::tra( 'TMDb lookup failed' ).': '.$person['found']['error']
