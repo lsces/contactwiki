@@ -36,7 +36,9 @@ namespace Bitweaver\Contactwiki;
 use Bitweaver\Fisheye\FisheyeGallery;
 use Bitweaver\Fisheyemedia\FisheyeCredits;
 use Bitweaver\Fisheyemedia\FisheyeFilm;
+use Bitweaver\Fisheyemedia\FisheyeProgram;
 use Bitweaver\Fisheyemedia\FisheyeSeason;
+use Bitweaver\Fisheyemedia\FisheyeTvdb;
 use Bitweaver\KernelTools;
 
 require_once '../kernel/includes/setup_inc.php';
@@ -161,6 +163,19 @@ if( $scope === 'film' && !empty( $_REQUEST['fReload'] ) ) {
 
 // ---- TV: reload the seasons' episodes from Plex (full cast per episode), which rebuilds each credit directory.
 // Each season is dozens of Plex calls and thumbnail fetches, so a few seasons per submit with a Continue.
+// ---- TV: fill the gaps Plex leaves from TheTVDB (a documentary's presenters, some series' episode writers/directors/guests). Press again to carry on.
+$tvdbResult = null;
+if( $scope === 'tv' && $programId && !empty( $_REQUEST['fTvdb'] ) ) {
+	if( !FisheyeTvdb::configured() ) {
+		$tvdbResult = [ 'ok' => false, 'error' => KernelTools::tra( 'No TheTVDB API key is set (Media Library Settings).' ) ];
+	} else {
+		set_time_limit( 120 );
+		$tvdbProgram = new FisheyeProgram( null, $programId );
+		$tvdbProgram->load();
+		$tvdbResult = $tvdbProgram->fillCreditsFromTvdb( 30.0 );
+	}
+}
+
 if( $scope === 'tv' && !empty( $_REQUEST['fReload'] ) ) {
 	$reloadResult = [ 'seasons' => [], 'episodes' => 0, 'next' => null, 'total' => count( $seasonIds ), 'creators' => null ];
 	// The show's creators (TMDb's created_by - not in its credits) go onto the program as `creator` rows, once, on the first batch.
@@ -602,6 +617,8 @@ $gBitSmarty->assign( 'linkableCharacters', $linkableCharacters );
 $gBitSmarty->assign( 'programUrl', $programId ? BIT_ROOT_URL.'index.php?content_id='.$programId : null );
 $gBitSmarty->assign( 'finished', $scope === 'tv' && $counts['linked'] > 0 && !$counts['match'] && !$counts['choose'] && !$counts['unmatched'] );
 $gBitSmarty->assign( 'reloadResult', $reloadResult );
+$gBitSmarty->assign( 'tvdbResult', $tvdbResult );
+$gBitSmarty->assign( 'tvdbConfigured', FisheyeTvdb::configured() );
 $gBitSmarty->assign( 'hiddenFields', array_filter( [ 'scope' => $scope === 'tv' ? 'tv' : null, 'program_id' => $programId ?: null ] ) );
 $gBitSmarty->assign( 'survey', [ 'films' => $survey['films'], 'credits' => $survey['credits'], 'people' => count( $survey['people'] ) ] );
 $gBitSmarty->assign( 'counts', $counts );

@@ -86,6 +86,21 @@
 		{/if}
 
 		{if $scope == 'tv'}
+			{if $tvdbResult}
+				<div class="alert {if $tvdbResult.ok}alert-success{else}alert-warning{/if}">
+					{if $tvdbResult.ok}
+						<p>TheTVDB ({$tvdbResult.name|escape}, #{$tvdbResult.series_id}, {tr}found by{/tr} {$tvdbResult.via|escape}): {$tvdbResult.people} {tr}people on the show{/tr}, {$tvdbResult.episodes_fetched} {tr}episodes asked for{/tr}{if $tvdbResult.episodes_left}, {$tvdbResult.episodes_left} {tr}still to ask{/tr}{/if}; {$tvdbResult.episodes_filled} {tr}episodes filled in{/tr} {$tvdbResult.seasons_filled} {tr}seasons{/tr}.</p>
+						{if $tvdbResult.episodes_left}
+							{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+								{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
+								<input type="submit" class="btn btn-primary" name="fTvdb" value="{tr}Continue with TheTVDB{/tr}" />
+							{/form}
+						{/if}
+					{else}
+						<p>{tr}TheTVDB gave nothing{/tr}: {$tvdbResult.error|escape}</p>
+					{/if}
+				</div>
+			{/if}
 			{if $reloadResult}
 				<div class="alert alert-success">
 					<p>{$reloadResult.seasons|@count} {tr}seasons reloaded from Plex{/tr} ({$reloadResult.episodes} {tr}episodes{/tr}), {tr}credit directories rebuilt{/tr}:</p>
@@ -115,6 +130,12 @@
 						<input type="submit" class="btn btn-default" name="fMarkDone" value="{tr}Mark show finished{/tr}" title="{tr}Take this show off the picker - for one whose people are dealt with but never reach 0 unlinked (a director left as plain text, or no people in Plex){/tr}" />
 					{/if}
 				{/form}
+				{if $tvdbConfigured}
+					{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
+						{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
+						<input type="submit" class="btn btn-default" name="fTvdb" value="{tr}Fill gaps from TheTVDB{/tr}" title="{tr}Asks TheTVDB who is in this show and fills the episodes Plex gave no people for (presenters, and some series' writers, directors and guests). Safe to repeat.{/tr}" />
+					{/form}
+				{/if}
 				{if $linkableCharacters}
 					<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_characters.php?program_id={$program.content_id}" title="{tr}Review this show's recurring roles and make a character contact for each (also links the characters Wikidata knows){/tr}">{tr}Characters{/tr} ({$linkableCharacters})</a>
 				{/if}
