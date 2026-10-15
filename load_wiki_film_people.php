@@ -63,6 +63,8 @@ const LOAD_WIKI_FILM_PEOPLE_TIME_BUDGET = 40;
 
 $scope = ( $_REQUEST['scope'] ?? '' ) === 'tv' ? 'tv' : 'film';
 $programId = $scope === 'tv' ? (int)( $_REQUEST['program_id'] ?? 0 ) : 0;
+// "Display minor credits": list and look up the one- and two-episode TV names too, instead of leaving them as plain text.
+$showMinor = $scope === 'tv' && !empty( $_REQUEST['minor'] );
 
 // "Mark finished" / "Reopen": a show whose people are dealt with but never reach 0 unlinked (a documentary's director left as plain text, a show Plex
 // holds no people for) is taken off the picker by hand - a content preference on the show, no schema.
@@ -616,7 +618,7 @@ if( $resolve ) {
 			$person['manual'] = [];
 			$person['manualOther'] = [];
 			// A one- or two-episode TV name nothing identified stays plain text and is not even searched (nor listed): not worth a contact.
-			$plainTv = $scope === 'tv' && $person['episodes'] < LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES;
+			$plainTv = $scope === 'tv' && !$showMinor && $person['episodes'] < LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES;
 			if( !$plainTv && $nameSearches++ < 12 ) {
 				foreach( ContactWikiIndividual::searchWikidataByName( $person['name'], array_keys( $person['roles'] ), array_keys( $functionsByName[mb_strtolower( $person['name'] )] ?? [] ) ) as $candidate ) {
 					// An item whose description names a screen/writing job is offered; the rest (no description, or a psychiatrist) are kept
@@ -660,15 +662,17 @@ $gBitSmarty->assign( 'finished', $scope === 'tv' && $counts['linked'] > 0 && !$c
 $gBitSmarty->assign( 'reloadResult', $reloadResult );
 $gBitSmarty->assign( 'tvdbResult', $tvdbResult );
 $gBitSmarty->assign( 'tvdbConfigured', FisheyeTvdb::configured() );
-$gBitSmarty->assign( 'hiddenFields', array_filter( [ 'scope' => $scope === 'tv' ? 'tv' : null, 'program_id' => $programId ?: null ] ) );
+$gBitSmarty->assign( 'hiddenFields', array_filter( [ 'scope' => $scope === 'tv' ? 'tv' : null, 'program_id' => $programId ?: null, 'minor' => $showMinor ? 1 : null ] ) );
+$gBitSmarty->assign( 'showMinor', $showMinor );
+$gBitSmarty->assign( 'minorUrl', CONTACTWIKI_PKG_URL.'load_wiki_film_people.php?scope=tv&program_id='.$programId.( $showMinor ? '' : '&minor=1' ) );
 $gBitSmarty->assign( 'survey', [ 'films' => $survey['films'], 'credits' => $survey['credits'], 'people' => count( $survey['people'] ) ] );
 $gBitSmarty->assign( 'counts', $counts );
 $gBitSmarty->assign( 'reviewList', array_slice( $reviewList, 0, LOAD_WIKI_FILM_PEOPLE_BATCH ) );
 $gBitSmarty->assign( 'reviewTotal', count( $reviewList ) );
 // The initial list on a TV show leaves out the one- and two-episode names: they are only checked for matches, and listed once one turns up.
-$unmatchedMinor = $scope === 'tv' ? count( array_filter( $unmatchedAll, fn( $p ) => $p['episodes'] < LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES ) ) : 0;
+$unmatchedMinor = $scope === 'tv' && !$showMinor ? count( array_filter( $unmatchedAll, fn( $p ) => $p['episodes'] < LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES ) ) : 0;
 $gBitSmarty->assign( 'unmatchedMinor', $unmatchedMinor );
-$gBitSmarty->assign( 'unmatchedShown', array_slice( $scope === 'tv' ? array_values( array_filter( array_slice( $unmatchedAll, $start ), fn( $p ) => $p['episodes'] >= LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES ) ) : array_slice( $unmatchedAll, $start ), 0, 30 ) );
+$gBitSmarty->assign( 'unmatchedShown', array_slice( $scope === 'tv' && !$showMinor ? array_values( array_filter( array_slice( $unmatchedAll, $start ), fn( $p ) => $p['episodes'] >= LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES ) ) : array_slice( $unmatchedAll, $start ), 0, 30 ) );
 // Whoever the lookup offset has stepped past (set aside or skipped) must stay visible - but only them: on a new show there is nobody, and no list.
 $gBitSmarty->assign( 'unmatchedSteppedPast', array_slice( $unmatchedAll, 0, min( $start, 200 ) ) );
 $gBitSmarty->assign( 'start', $start );
