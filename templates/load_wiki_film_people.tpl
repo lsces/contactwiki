@@ -220,7 +220,7 @@
 				{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
 					<input type="hidden" name="start" value="{$start}" />
 					<input type="submit" class="btn btn-primary" name="fResolve" value="{tr}Look up next batch{/tr}" />
-					{if $scope == 'tv'}<a class="btn btn-default" href="{$minorUrl|escape}">{if $showMinor}{tr}Hide minor credits{/tr}{else}{tr}Display minor credits{/tr}{/if}</a>{/if}
+					{if $scope == 'tv'}&nbsp;<a class="btn btn-default" href="{$minorUrl|escape}">{if $showMinor}{tr}Hide minor credits{/tr}{else}{tr}Display minor credits{/tr}{/if}</a>{/if}
 				{/form}
 				{if $unmatchedMinor}<p class="text-muted">{$unmatchedMinor} {tr}names in only one or two episodes are checked for a match but not listed here; any with a match appear after the lookup.{/tr}</p>{/if}
 				<table class="table table-condensed">
