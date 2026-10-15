@@ -221,6 +221,7 @@
 					<input type="hidden" name="start" value="{$start}" />
 					<input type="submit" class="btn btn-primary" name="fResolve" value="{tr}Look up next batch{/tr}" />
 				{/form}
+				{if $unmatchedMinor}<p class="text-muted">{$unmatchedMinor} {tr}names in only one or two episodes are checked for a match but not listed here; any with a match appear after the lookup.{/tr}</p>{/if}
 				<table class="table table-condensed">
 					<thead><tr><th>{tr}Credited as{/tr}</th><th>{if $scope == 'tv'}{tr}Episodes{/tr}{else}{tr}Credits{/tr}{/if}</th><th>{if $scope == 'tv'}{tr}Seasons{/tr}{else}{tr}Films{/tr}{/if}</th></tr></thead>
 					<tbody>
@@ -244,12 +245,13 @@
 					{form legend="" action="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php"}
 				{foreach from=$hiddenFields key=k item=v}<input type="hidden" name="{$k}" value="{$v|escape}" />{/foreach}
 						<input type="hidden" name="start" value="{$start}" />
+						<input type="hidden" name="plain" value="{$lookup.plain}" />
 						{foreach from=$lookup.people item=person}<input type="hidden" name="batch[]" value="{$person.key|escape}" />{/foreach}
-						<p>{$lookup.people|@count} {tr}looked up{/tr}{if $lookup.remaining}, {$lookup.remaining} {tr}more after these{/tr}{/if}:&nbsp;
+						<p>{$lookup.people|@count} {tr}looked up{/tr}{if $lookup.plain} ({$lookup.plain} {tr}one- or two-episode names with no match left as plain text{/tr}){/if}{if $lookup.remaining}, {$lookup.remaining} {tr}more after these{/tr}{/if}:&nbsp;
 							<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create / Link Selected{/tr}" />
 							<label class="checkbox-inline" style="margin:0 1.5em;" title="{tr}Wikimedia refuses bulk photo downloads for a while after a few big batches; without photos a batch makes more contacts per press, and a contact's photo can be loaded later from its own page.{/tr}"><input type="checkbox" name="photos" value="1" /> {tr}Fetch photos too{/tr}</label>
 							<label class="checkbox-inline" style="margin:0 1.5em;" title="{tr}Left out, a contact's biography and photo are loaded the first time someone who can edit it opens its page.{/tr}"><input type="checkbox" name="bios" value="1" /> {tr}Fetch biographies too{/tr}</label>
-							<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?fResolve=1&amp;start={$start+$lookup.people|@count}{foreach from=$hiddenFields key=k item=v}&amp;{$k}={$v|escape:'url'}{/foreach}">{tr}Skip these{/tr}</a></p>
+							<a class="btn btn-default" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?fResolve=1&amp;start={$start+$lookup.stepped}{foreach from=$hiddenFields key=k item=v}&amp;{$k}={$v|escape:'url'}{/foreach}">{tr}Skip these{/tr}</a></p>
 						<table class="table table-condensed">
 							<thead>
 								<tr>
@@ -327,7 +329,8 @@
 						<input type="submit" class="btn btn-primary" name="fCreate" value="{tr}Create / Link Selected{/tr}" />
 					{/form}
 				{else}
-					<p>{tr}Nobody left to look up from here.{/tr}{if $unmatchedSteppedPast} {tr}Those stepped past are listed below.{/tr}{/if}</p>
+					{if $lookup.remaining}<p>{$lookup.plain} {tr}one- or two-episode names with no match left as plain text; nobody to show in this batch.{/tr} <a class="btn btn-primary" href="{$smarty.const.CONTACTWIKI_PKG_URL}load_wiki_film_people.php?fResolve=1&amp;start={$start+$lookup.stepped}{foreach from=$hiddenFields key=k item=v}&amp;{$k}={$v|escape:'url'}{/foreach}">{tr}Next batch{/tr}</a></p>{else}
+					<p>{tr}Nobody left to look up from here.{/tr}{if $unmatchedSteppedPast} {tr}Those stepped past are listed below.{/tr}{/if}</p>{/if}
 				{/if}
 				{if $unmatchedSteppedPast}
 					<h3>{tr}Stepped past{/tr} ({$unmatchedSteppedPast|@count})</h3>

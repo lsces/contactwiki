@@ -433,7 +433,8 @@ if( !empty( $_REQUEST['fCreate'] ) ) {
 			$stillThere++;
 		}
 	}
-	$start += $stillThere;
+	// Plain-text TV names dropped from the displayed batch stay in the list too, so they count towards the offset as well.
+	$start += $stillThere + (int)( $_REQUEST['plain'] ?? 0 );
 }
 
 // ---- Stage 2 lookup: TMDb person ids from the films' credits, then Wikidata Q-ids, for the next batch.
@@ -614,14 +615,16 @@ if( $resolve ) {
 			static $nameSearches = 0;
 			$person['manual'] = [];
 			$person['manualOther'] = [];
-			if( $nameSearches++ < 12 ) {
+			// A one- or two-episode TV name nothing identified stays plain text and is not even searched (nor listed): not worth a contact.
+			$plainTv = $scope === 'tv' && $person['episodes'] < LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES;
+			if( !$plainTv && $nameSearches++ < 12 ) {
 				foreach( ContactWikiIndividual::searchWikidataByName( $person['name'], array_keys( $person['roles'] ), array_keys( $functionsByName[mb_strtolower( $person['name'] )] ?? [] ) ) as $candidate ) {
 					// An item whose description names a screen/writing job is offered; the rest (no description, or a psychiatrist) are kept
 					// behind a fold, so a common name does not bury the page in eight look-alikes and the name-only contact stays the default.
 					$person[$candidate['fit'] || $candidate['likely'] ? 'manual' : 'manualOther'][] = $candidate + [ 'value' => '0:'.$candidate['qid'] ];
 				}
 			}
-			$person['status'] = 'unresolved';
+			$person['status'] = $plainTv ? 'plain' : 'unresolved';
 			// A TV person nothing identifies, but who recurs (3+ episodes), is worth a contact from the name; a one-off guest stays plain text.
 			$person['recurring'] = $scope === 'tv' && $person['episodes'] >= LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES;
 			$person['reason'] = !$tokenSet ? KernelTools::tra( 'No TMDb access token is set.' )
@@ -637,7 +640,10 @@ if( $resolve ) {
 		}
 	}
 	unset( $person );
-	$lookup = [ 'people' => $batch, 'wikidataError' => $wikidataError, 'wikidataErrorReason' => $wikidataErrorReason,
+	// TV people under the episode threshold with no match are dropped from the list; 'stepped' keeps the paging offset counting them.
+	$stepped = count( $batch );
+	$batch = array_values( array_filter( $batch, fn( $p ) => $p['status'] !== 'plain' ) );
+	$lookup = [ 'people' => $batch, 'stepped' => $stepped, 'plain' => $stepped - count( $batch ), 'wikidataError' => $wikidataError, 'wikidataErrorReason' => $wikidataErrorReason,
 		'tokenSet' => $tokenSet, 'remaining' => max( 0, count( $unmatchedAll ) - $start - count( $batch ) ) ];
 }
 
@@ -659,7 +665,10 @@ $gBitSmarty->assign( 'survey', [ 'films' => $survey['films'], 'credits' => $surv
 $gBitSmarty->assign( 'counts', $counts );
 $gBitSmarty->assign( 'reviewList', array_slice( $reviewList, 0, LOAD_WIKI_FILM_PEOPLE_BATCH ) );
 $gBitSmarty->assign( 'reviewTotal', count( $reviewList ) );
-$gBitSmarty->assign( 'unmatchedShown', array_slice( $unmatchedAll, $start, 30 ) );
+// The initial list on a TV show leaves out the one- and two-episode names: they are only checked for matches, and listed once one turns up.
+$unmatchedMinor = $scope === 'tv' ? count( array_filter( $unmatchedAll, fn( $p ) => $p['episodes'] < LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES ) ) : 0;
+$gBitSmarty->assign( 'unmatchedMinor', $unmatchedMinor );
+$gBitSmarty->assign( 'unmatchedShown', array_slice( $scope === 'tv' ? array_values( array_filter( array_slice( $unmatchedAll, $start ), fn( $p ) => $p['episodes'] >= LOAD_WIKI_FILM_PEOPLE_RECURRING_EPISODES ) ) : array_slice( $unmatchedAll, $start ), 0, 30 ) );
 // Whoever the lookup offset has stepped past (set aside or skipped) must stay visible - but only them: on a new show there is nobody, and no list.
 $gBitSmarty->assign( 'unmatchedSteppedPast', array_slice( $unmatchedAll, 0, min( $start, 200 ) ) );
 $gBitSmarty->assign( 'start', $start );
