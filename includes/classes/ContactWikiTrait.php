@@ -1520,6 +1520,37 @@ trait ContactWikiTrait {
 	}
 
 	/**
+	 * Tag this person as a writer (WP11) if they are not already - additive, as every type tag.
+	 */
+	public function markAsWriter(): void {
+		if( !( $this instanceof ContactWikiGroup ) ) {
+			$this->addTypeTags( [ 'WP11' ] );
+		}
+	}
+
+	/**
+	 * Remember another way this person's name is written ("Todd J. McCaffrey" for "Todd McCaffrey") as a pen
+	 * name row marked as from a credit, so the credit's name finds this contact from then on. Spellings
+	 * differing only by case, spaces or punctuation count as the same name already held.
+	 *
+	 * @return bool  true if a row was added
+	 */
+	public function addOtherName( string $pName ): bool {
+		global $gBitDb;
+		$key = fn( string $n ) => str_replace( ' ', '', self::normaliseName( $n ) );
+		$order = 0;
+		foreach( $gBitDb->getAll( "SELECT `xkey_ext`, `xorder` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ( 'penname', 'birthname' ) AND `end_date` IS NULL", [ $this->mContentId ] ) ?: [] as $row ) {
+			if( $key( (string)$row['xkey_ext'] ) === $key( $pName ) ) {
+				return false;
+			}
+			$order = max( $order, (int)$row['xorder'] );
+		}
+		$hash = [ 'content_id' => $this->mContentId, 'item' => 'penname', 'xkey_ext' => trim( $pName ), 'xorder' => $order + 1,
+			'edit' => json_encode( [ 'source' => 'credit' ] ), 'fAddXref' => 1 ];
+		return (bool)$this->storeXref( $hash );
+	}
+
+	/**
 	 * The names this person writes (or wrote) under, and their birth name, from Wikidata's pseudonym (P742)
 	 * and birth name (P1477) claims - a person only: each pen name a 'penname' row, the birth name a
 	 * 'birthname' row. A book is credited to the name it was published under and linked to the person, so a
@@ -1548,12 +1579,13 @@ trait ContactWikiTrait {
 		foreach( [ 'penname' => 'P742', 'birthname' => 'P1477' ] as $item => $property ) {
 			$wanted = [];
 			foreach( $claimTexts( $property ) as $text ) {
-				$wanted[] = [ 'key' => mb_strtolower( $text ), 'xorder' => count( $wanted ) + 1, 'xkey_ext' => $text ];
+				$wanted[] = [ 'key' => mb_strtolower( $text ), 'xorder' => count( $wanted ) + 1, 'xkey_ext' => $text, 'data' => [ 'source' => 'wikidata' ] ];
 			}
 			if( !$wanted ) {
 				continue;
 			}
-			$counts = $this->reconcileXrefItem( $item, $wanted, fn( array $pRow ) => mb_strtolower( (string)$pRow['xkey_ext'] ) );
+			// Strict ownership: only rows Wikidata made are reconciled - a spelling remembered from a credit, or a name added by hand, stays.
+			$counts = $this->reconcileXrefItem( $item, $wanted, fn( array $pRow ) => mb_strtolower( (string)$pRow['xkey_ext'] ), true );
 			if( !empty( $counts['inserted'] ) ) {
 				$items[] = $item.': '.implode( ', ', array_column( $wanted, 'xkey_ext' ) );
 			}
