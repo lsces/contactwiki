@@ -37,7 +37,24 @@ class ContactWikiIndividual extends ContactPerson {
 		'discogs_artist' => 'P1953',
 		'viaf'           => 'P214',
 		'openlibrary'    => 'P648',
+		'isfdb'          => 'P1233',
+		'goodreads'      => 'P2963',
+		'librarything'   => 'P7400',
+		'isni'           => 'P213',
+		'lc_naf'         => 'P244',
 		'official_site'  => 'P856',
+	];
+
+	// item => the key Open Library's author record holds the same id under (its remote_ids). Open Library
+	// only fills what Wikidata left empty - see ContactWikiTrait::applyOpenLibraryData().
+	const OPENLIBRARY_REMOTE_IDS = [
+		'viaf'         => 'viaf',
+		'isni'         => 'isni',
+		'lc_naf'       => 'lc_naf',
+		'goodreads'    => 'goodreads',
+		'librarything' => 'librarything',
+		'wikidata'     => 'wikidata',
+		'imdb'         => 'imdb',
 	];
 
 	// Curated, not a mirror of Wikidata's own occupation (P106) list - only the occupations that

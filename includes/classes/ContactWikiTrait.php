@@ -225,6 +225,9 @@ trait ContactWikiTrait {
 		}
 
 		$t = self::stepDone( 'dates', $t );
+		foreach( $this->applyOtherNames( $entity ) as $line ) {
+			$items[] = $line;
+		}
 		$imageFilename = self::imageFilename( $entity );
 		if( $imageFilename && self::$skipPhotos && WikimediaCache::getImage( $imageFilename ) === null ) {
 			$imageFilename = null;
@@ -232,7 +235,13 @@ trait ContactWikiTrait {
 		if( $imageFilename && $this->storeCommonsPhoto( $imageFilename ) ) {
 			$items[] = KernelTools::tra( 'Image' ).': '.$imageFilename;
 		}
-		self::stepDone( 'photo', $t );
+		$t = self::stepDone( 'photo', $t );
+
+		// An author Wikidata gives an Open Library id for: whatever Open Library adds on top.
+		foreach( $this->applyOpenLibraryData()['items'] ?? [] as $line ) {
+			$items[] = $line;
+		}
+		self::stepDone( 'open library', $t );
 
 		return [ 'items' => $items ];
 	}
@@ -1198,9 +1207,9 @@ trait ContactWikiTrait {
 
 	/**
 	 * A contact from a credited name alone - nothing external known (TMDb has no record, Wikidata none chosen). Tagged from the credit roles
-	 * (director -> WP02, writer -> WP07, star -> WP01). Its identity is its name; a later Reload from Wikidata still works once a Wikidata id is added.
+	 * (director -> WP02, writer -> WP07, star -> WP01, a book's author -> WP11). Its identity is its name; a later Reload from Wikidata still works once a Wikidata id is added.
 	 *
-	 * @param string[] $pRoles  the credit roles (director/writer/star)
+	 * @param string[] $pRoles  the credit roles (director/writer/star/author)
 	 * @return array{content:object}|array{error:string}
 	 */
 	public static function createNameOnly( string $pName, array $pRoles, bool $pAsThemselves = false ): array {
@@ -1208,7 +1217,7 @@ trait ContactWikiTrait {
 		$parts = explode( ' ', trim( $pName ) );
 		$surname = array_pop( $parts ) ?: '';
 		// Someone who is only ever on screen as themselves (a "Self - Presenter") is not an Actor: no tag, so they list under Others.
-		$codes = [ 'star' => $pAsThemselves ? 'WP99' : 'WP01', 'director' => 'WP02', 'writer' => 'WP07' ];
+		$codes = [ 'star' => $pAsThemselves ? 'WP99' : 'WP01', 'director' => 'WP02', 'writer' => 'WP07', 'author' => 'WP11' ];
 		$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1,
 			'contact_types' => array_values( array_unique( array_filter( array_map( fn( $r ) => $codes[$r] ?? null, $pRoles ) ) ) ) ];
 		if( !$gContent->store( $storeHash ) ) {
@@ -1407,6 +1416,278 @@ trait ContactWikiTrait {
 
 	public static function findContactByWikidataQid( string $pQid ): ?array {
 		return self::findWikiContactByXref( 'wikidata', strtoupper( $pQid ) );
+	}
+
+	public static function findContactByOpenLibraryId( string $pOlid ): ?array {
+		return self::findWikiContactByXref( 'openlibrary', strtoupper( $pOlid ) );
+	}
+
+	/** @var array<string,array|null> Open Library author records fetched this request, by id */
+	private static array $openLibraryAuthors = [];
+
+	/**
+	 * One Open Library API document (a path from the site root, ".json" included), or null. Open Library
+	 * wants a User-Agent it can identify, the same contact setting the Wikimedia calls use.
+	 */
+	public static function fetchOpenLibraryJson( string $pPath ): ?array {
+		$context = stream_context_create( [ 'http' => [ 'header' => self::userAgentHeader(), 'timeout' => 15, 'follow_location' => 1 ] ] );
+		$json = self::fetchExternal( 'https://openlibrary.org'.$pPath, $context );
+		$data = $json === false ? null : json_decode( $json, true );
+		return is_array( $data ) ? $data : null;
+	}
+
+	/**
+	 * An Open Library author record by id (OL19880A). An author merged into another comes back as a
+	 * redirect, which is followed once - the record's own 'key' says which id it ended up as. Null when
+	 * Open Library has no such author.
+	 */
+	public static function fetchOpenLibraryAuthor( string $pOlid ): ?array {
+		$olid = strtoupper( trim( $pOlid ) );
+		if( !preg_match( '/^OL\d+A$/', $olid ) ) {
+			return null;
+		}
+		if( !array_key_exists( $olid, self::$openLibraryAuthors ) ) {
+			$author = self::fetchOpenLibraryJson( '/authors/'.$olid.'.json' );
+			if( ( $author['type']['key'] ?? '' ) === '/type/redirect' && !empty( $author['location'] ) ) {
+				$author = self::fetchOpenLibraryJson( $author['location'].'.json' );
+			}
+			self::$openLibraryAuthors[$olid] = !empty( $author['name'] ) && !empty( $author['key'] ) ? $author : null;
+		}
+		return self::$openLibraryAuthors[$olid];
+	}
+
+	/**
+	 * Open Library authors by name, most books first - each {olid, name, alternate_names, birth_date,
+	 * work_count, top_work}. For a person Wikidata has no item for, or has not been asked about.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	public static function searchOpenLibraryAuthors( string $pName ): array {
+		$data = self::fetchOpenLibraryJson( '/search/authors.json?'.http_build_query( [ 'q' => $pName, 'limit' => 8 ], '', '&' ) );
+		$found = [];
+		foreach( $data['docs'] ?? [] as $doc ) {
+			if( empty( $doc['key'] ) || empty( $doc['name'] ) ) {
+				continue;
+			}
+			$found[] = [ 'olid' => $doc['key'], 'name' => (string)$doc['name'], 'alternate_names' => (array)( $doc['alternate_names'] ?? [] ),
+				'birth_date' => (string)( $doc['birth_date'] ?? '' ), 'work_count' => (int)( $doc['work_count'] ?? 0 ), 'top_work' => (string)( $doc['top_work'] ?? '' ) ];
+		}
+		usort( $found, fn( $a, $b ) => $b['work_count'] <=> $a['work_count'] );
+		return $found;
+	}
+
+	/**
+	 * An image from Open Library's cover service (an author portrait or a book cover - add default=false
+	 * to the URL, so a missing one is a 404 rather than a placeholder), or null when it is not there or
+	 * not a real picture (a stray error page, or one of the 1px placeholders).
+	 */
+	public static function fetchOpenLibraryImage( string $pUrl ): ?string {
+		$context = stream_context_create( [ 'http' => [ 'header' => self::userAgentHeader(), 'timeout' => 20, 'follow_location' => 1 ] ] );
+		$bytes = self::fetchExternal( $pUrl, $context );
+		$info = $bytes ? @getimagesizefromstring( $bytes ) : false;
+		return $info && $info[0] >= 40 && $info[1] >= 40 ? $bytes : null;
+	}
+
+	/**
+	 * An Open Library date ("1 April 1926", "April 1926", "1926") as the YYYY-MM-DD / YYYY-MM / YYYY a
+	 * contact's dob/dod hold. Null for anything vaguer ("c. 1900", "1920s") - left for a hand edit.
+	 */
+	public static function openLibraryDate( string $pDate ): ?string {
+		$pDate = trim( $pDate );
+		if( preg_match( '/^\d{4}$/', $pDate ) ) {
+			return $pDate;
+		}
+		if( preg_match( '/^([A-Za-z]+) (\d{4})$/', $pDate, $m ) && ( $d = \DateTime::createFromFormat( '!F Y', $m[1].' '.$m[2] ) ) ) {
+			return $d->format( 'Y-m' );
+		}
+		if( preg_match( '/^(\d{1,2}) ([A-Za-z]+) (\d{4})$/', $pDate, $m ) && ( $d = \DateTime::createFromFormat( '!j F Y', $pDate ) ) ) {
+			return $d->format( 'Y-m-d' );
+		}
+		return null;
+	}
+
+	/**
+	 * Open Library's biography as plain text - its own markdown source references ("([source][1])" and
+	 * the "[1]: http..." lines) and anything after a rule of dashes (a "See also" list) left out.
+	 */
+	public static function openLibraryBiography( array $pAuthor ): string {
+		$bio = $pAuthor['bio'] ?? '';
+		$bio = is_array( $bio ) ? (string)( $bio['value'] ?? '' ) : (string)$bio;
+		$bio = preg_split( '/^\s*-{5,}\s*$/m', str_replace( "\r", '', $bio ) )[0];
+		$bio = preg_replace( '/\(\[source\]\[\d+\]\)/i', '', $bio );
+		$bio = preg_replace( '/^\[\d+\]:.*$/m', '', $bio );
+		return trim( preg_replace( '/\n{3,}/', "\n\n", $bio ) );
+	}
+
+	/**
+	 * The names this person writes (or wrote) under, and their birth name, from Wikidata's pseudonym (P742)
+	 * and birth name (P1477) claims - a person only: each pen name a 'penname' row, the birth name a
+	 * 'birthname' row. A book is credited to the name it was published under and linked to the person, so a
+	 * credit for "Megan Lindholm" and one for "Robin Hobb" are found by these names and land on the one
+	 * contact. Reconciled, so a pen name added by hand stays.
+	 *
+	 * @return list<string>  what was written, for the reload summary
+	 */
+	public function applyOtherNames( array $pEntity ): array {
+		if( $this instanceof ContactWikiGroup ) {
+			return [];
+		}
+		// P742 values are plain strings, P1477 a monolingual text ({text, language}).
+		$claimTexts = function( string $pProperty ) use ( $pEntity ): array {
+			$texts = [];
+			foreach( $pEntity['claims'][$pProperty] ?? [] as $claim ) {
+				$value = $claim['mainsnak']['datavalue']['value'] ?? null;
+				$text = trim( (string)( is_array( $value ) ? ( $value['text'] ?? '' ) : $value ) );
+				if( $text !== '' ) {
+					$texts[mb_strtolower( $text )] = $text;
+				}
+			}
+			return array_values( $texts );
+		};
+		$items = [];
+		foreach( [ 'penname' => 'P742', 'birthname' => 'P1477' ] as $item => $property ) {
+			$wanted = [];
+			foreach( $claimTexts( $property ) as $text ) {
+				$wanted[] = [ 'key' => mb_strtolower( $text ), 'xorder' => count( $wanted ) + 1, 'xkey_ext' => $text ];
+			}
+			if( !$wanted ) {
+				continue;
+			}
+			$counts = $this->reconcileXrefItem( $item, $wanted, fn( array $pRow ) => mb_strtolower( (string)$pRow['xkey_ext'] ) );
+			if( !empty( $counts['inserted'] ) ) {
+				$items[] = $item.': '.implode( ', ', array_column( $wanted, 'xkey_ext' ) );
+			}
+		}
+		return $items;
+	}
+
+	/**
+	 * Add what Open Library knows about this author to a contact that has (or is given) an Open Library
+	 * id. Fills gaps only - Wikidata, a hand edit and a Wikipedia biography all win over Open Library;
+	 * what Open Library alone supplies is kept: the ids Wikidata did not have (VIAF, ISNI, Library of
+	 * Congress, Goodreads, LibraryThing), the dates, a biography and the portrait.
+	 *
+	 * @return array{items:list<string>}|array{error:string}
+	 */
+	public function applyOpenLibraryData( ?string $pOlid = null ): array {
+		global $gBitDb;
+		if( $this instanceof ContactWikiGroup || !$this->isValid() ) {
+			return [ 'items' => [] ];
+		}
+		$olid = $pOlid;
+		if( !$olid ) {
+			$row = \Bitweaver\Liberty\LibertyContent::lookupXrefByItem( $this->mContentId, 'openlibrary', $this->mContentTypeGuid );
+			$olid = $row['xkey_ext'] ?? null;
+		}
+		if( !$olid ) {
+			return [ 'items' => [] ];
+		}
+		$author = self::fetchOpenLibraryAuthor( $olid );
+		if( !$author ) {
+			return [ 'error' => KernelTools::tra( 'Open Library has no author with that id.' ).' ('.$olid.')' ];
+		}
+		$olid = basename( $author['key'] );
+		$items = [];
+		$has = fn( string $pItem ): bool => (bool)(int)$gBitDb->getOne(
+			"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = ? AND `end_date` IS NULL", [ $this->mContentId, $pItem ] );
+
+		// Open Library's other names (variant spellings, "Hobb, Robin pseud. van ...") are too loose to keep as
+		// pen names - those come from Wikidata. Here only the id.
+		$this->upsertXref( $this->mContentId, 'openlibrary', [ 'xkey_ext' => $olid ] );
+		$items[] = 'openlibrary: '.$olid;
+
+		foreach( static::OPENLIBRARY_REMOTE_IDS as $item => $key ) {
+			$value = trim( (string)( $author['remote_ids'][$key] ?? '' ) );
+			if( $value !== '' && !$has( $item ) ) {
+				$this->upsertXref( $this->mContentId, $item, [ 'xkey_ext' => $item === 'wikidata' ? strtoupper( $value ) : $value ] );
+				$items[] = $item.': '.$value;
+			}
+		}
+
+		foreach( [ 'dob' => 'birth_date', 'dod' => 'death_date' ] as $item => $key ) {
+			$date = self::openLibraryDate( (string)( $author[$key] ?? '' ) );
+			if( $date !== null && !$has( $item ) ) {
+				$this->upsertXref( $this->mContentId, $item, [ 'xkey_ext' => $date ] );
+				$items[] = $item.': '.$date;
+			}
+		}
+
+		$bio = self::openLibraryBiography( $author );
+		if( $bio !== '' && trim( (string)$gBitDb->getOne( "SELECT `data` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] ) ) === '' ) {
+			$bioHash = [ 'content_id' => $this->mContentId, 'title' => $this->storedTitle(), 'edit' => self::plainTextToHtmlParagraphs( $bio ) ];
+			\Bitweaver\Liberty\LibertyContent::store( $bioHash );
+			$items[] = KernelTools::tra( 'Biography' ).' ('.KernelTools::tra( 'Open Library' ).')';
+		}
+
+		if( !$has( 'image' ) && $this->storeOpenLibraryPhoto( $olid ) ) {
+			$items[] = KernelTools::tra( 'Image' ).': Open Library';
+		}
+		return [ 'items' => $items ];
+	}
+
+	/**
+	 * The author's portrait from Open Library (default=false: a 404 rather than a grey placeholder when
+	 * there is none) into this contact's own image folder, recorded as its 'image' xref.
+	 *
+	 * @return bool  false if Open Library has no portrait or the download failed
+	 */
+	public function storeOpenLibraryPhoto( string $pOlid ): bool {
+		$bytes = self::fetchOpenLibraryImage( 'https://covers.openlibrary.org/a/olid/'.rawurlencode( $pOlid ).'-L.jpg?default=false' );
+		$info = $bytes !== null ? getimagesizefromstring( $bytes ) : false;
+		if( !$info ) {
+			return false;
+		}
+		$ext = match( $info[2] ) { IMAGETYPE_PNG => 'png', IMAGETYPE_GIF => 'gif', IMAGETYPE_WEBP => 'webp', default => 'jpg' };
+		$imagesDir = $this->getExtraImagePath( '' );
+		KernelTools::mkdir_p( $imagesDir );
+		$storedName = 'openlibrary.'.$ext;
+		if( !file_put_contents( $imagesDir.$storedName, $bytes ) ) {
+			return false;
+		}
+		@chmod( $imagesDir.$storedName, 0644 );
+		$this->upsertXref( $this->mContentId, 'image', [ 'xkey_ext' => $storedName ] );
+		$this->thumbnailIfNone( $storedName );
+		return true;
+	}
+
+	/**
+	 * A contact for an Open Library author. Already known (by Open Library id or by the Wikidata id the
+	 * record carries) -> that contact, with Open Library's extras added. Wikidata has an item -> created
+	 * from it as any other, then topped up. Neither -> a name-only writer made from Open Library alone,
+	 * which a later Reload from Wikidata still upgrades once a Wikidata id is added.
+	 *
+	 * @return array{content:object}|array{error:string}
+	 */
+	public static function createFromOpenLibrary( string $pOlid ): array {
+		$author = self::fetchOpenLibraryAuthor( $pOlid );
+		if( !$author ) {
+			return [ 'error' => KernelTools::tra( 'Open Library has no author with that id.' ).' ('.$pOlid.')' ];
+		}
+		$olid = basename( $author['key'] );
+		$qid = !empty( $author['remote_ids']['wikidata'] ) ? strtoupper( (string)$author['remote_ids']['wikidata'] ) : null;
+		$held = self::findContactByOpenLibraryId( $olid ) ?: ( $qid ? self::findContactByWikidataQid( $qid ) : null );
+		if( $held ) {
+			$existing = new ContactWikiIndividual( null, (int)$held['content_id'] );
+			$existing->load();
+			$existing->applyOpenLibraryData( $olid );
+			return [ 'content' => $existing ];
+		}
+		if( $qid ) {
+			$made = self::createFromWikidata( $qid, false );
+			if( isset( $made['content'] ) ) {
+				$made['content']->applyOpenLibraryData( $olid );
+				return $made;
+			}
+		}
+		$parts = explode( ' ', trim( (string)$author['name'] ) );
+		$surname = array_pop( $parts ) ?: '';
+		$gContent = new ContactWikiIndividual();
+		$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1, 'contact_types' => [ 'WP11' ] ];
+		if( !$gContent->store( $storeHash ) ) {
+			return [ 'error' => implode( '; ', $gContent->mErrors ) ];
+		}
+		$gContent->applyOpenLibraryData( $olid );
+		return [ 'content' => $gContent ];
 	}
 
 	/**
