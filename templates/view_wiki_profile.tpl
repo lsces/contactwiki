@@ -17,13 +17,16 @@
 				   whichever items the 'biography' group actually has set, straight from mXrefInfo,
 				   same data the xref tabs below use - no hardcoded item list, so a new biography
 				   item added to the schema later just appears here with no template change. *}
+				{* A fact whose value is a web address (an official site) is not printed in the facts line - the sites follow it,
+				   each a link, on a line of their own; a second site of the same item is told apart by its host. *}
 				{foreach from=$gXrefInfo->mGroups item=xrefGroup}
 					{if $xrefGroup->mXGroup eq 'biography' && $xrefGroup->mXrefs|@count}
-						<p class="wiki-profile-dates">
-							{foreach from=$xrefGroup->mXrefs item=xrefInfo name=bioFacts}
-								<strong>{$xrefInfo.xref_title|escape}:</strong> {$xrefInfo.xkey_ext|default:$xrefInfo.xkey|escape}{if !$smarty.foreach.bioFacts.last}&nbsp;&middot;&nbsp;{/if}
-							{/foreach}
-						</p>
+						{assign var=bioSep value=''}
+						{capture name=bioFacts}{foreach from=$xrefGroup->mXrefs item=xrefInfo}{if ( $xrefInfo.xkey_ext|substr:0:4 ) ne 'http'}{$bioSep}<strong>{$xrefInfo.xref_title|escape}:</strong> {$xrefInfo.xkey_ext|default:$xrefInfo.xkey|escape}{assign var=bioSep value='&nbsp;&middot;&nbsp;'}{/if}{/foreach}{/capture}
+						{if $smarty.capture.bioFacts|strlen > 0}<p class="wiki-profile-dates">{$smarty.capture.bioFacts}</p>{/if}
+						{assign var=siteSep value=''}
+						{capture name=bioSites}{foreach from=$xrefGroup->mXrefs item=xrefInfo}{if ( $xrefInfo.xkey_ext|substr:0:4 ) eq 'http'}{$siteSep}<a href="{$xrefInfo.xkey_ext|escape}" target="_blank" rel="noopener">{if $xrefInfo.xorder > 0}{$xrefInfo.xkey_ext|regex_replace:'~^https?://(www\.)?([^/]+).*$~':'$2'|escape}{else}{$xrefInfo.xref_title|escape}{/if}</a>{assign var=siteSep value='&nbsp;&middot;&nbsp;'}{/if}{/foreach}{/capture}
+						{if $smarty.capture.bioSites|strlen > 0}<p class="wiki-profile-sites">{$smarty.capture.bioSites}</p>{/if}
 					{/if}
 				{/foreach}
 
@@ -41,6 +44,9 @@
 							{foreach from=$xrefGroup->mXrefs item=xrefInfo name=extLinks}
 								{if $xrefInfo.cross_ref_href && ( $xrefInfo.xkey || $xrefInfo.xkey_ext )}
 									<a href="{$xrefInfo.cross_ref_href|escape}{$xrefInfo.xkey|default:$xrefInfo.xkey_ext|escape}" target="_blank" rel="noopener">{$xrefInfo.xref_title|escape}</a>{if !$smarty.foreach.extLinks.last} &middot; {/if}
+								{elseif !$xrefInfo.cross_ref_href && $xrefInfo.xkey_ext && ( $xrefInfo.xkey_ext|substr:0:4 ) eq 'http'}
+									{* An item with no prefix that holds a whole URL (official_site): the value is the link. A second site of the same item is told apart by its host. *}
+									<a href="{$xrefInfo.xkey_ext|escape}" target="_blank" rel="noopener">{$xrefInfo.xref_title|escape}{if $xrefInfo.xorder > 0} ({$xrefInfo.xkey_ext|regex_replace:'~^https?://(www\.)?([^/]+).*$~':'$2'|escape}){/if}</a>{if !$smarty.foreach.extLinks.last} &middot; {/if}
 								{/if}
 							{/foreach}
 						</p>

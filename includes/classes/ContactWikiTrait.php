@@ -186,6 +186,19 @@ trait ContactWikiTrait {
 
 		$t = self::stepDone( 'type tags', $t );
 		foreach( static::EXTERNAL_ID_PROPS as $item => $property ) {
+			if( $item === 'official_site' ) {
+				// Every official website Wikidata lists (an author's own and a second name's), preferred first.
+				$sites = self::officialSites( $entity );
+				if( $sites ) {
+					$wanted = [];
+					foreach( $sites as $site ) {
+						$wanted[] = [ 'key' => mb_strtolower( $site ), 'xorder' => count( $wanted ), 'xkey_ext' => $site, 'data' => [ 'source' => 'wikidata' ] ];
+					}
+					$this->reconcileXrefItem( $item, $wanted, fn( array $pRow ) => mb_strtolower( (string)$pRow['xkey_ext'] ) );
+					$items[] = $item.': '.implode( ', ', $sites );
+				}
+				continue;
+			}
 			$value = self::stringClaim( $entity, $property );
 			if( $value !== null ) {
 				$this->upsertXref( $this->mContentId, $item, [ 'xkey_ext' => $value ] );
@@ -1108,7 +1121,7 @@ trait ContactWikiTrait {
 	}
 
 	/** One SPARQL query against Wikidata's endpoint; the bindings, or null if it cannot be asked. */
-	private static function wikidataSparql( string $pQuery ): ?array {
+	public static function wikidataSparql( string $pQuery ): ?array {
 		$context = stream_context_create( [ 'http' => [
 			'method'  => 'POST',
 			'header'  => self::userAgentHeader()."Accept: application/sparql-results+json\r\nContent-Type: application/x-www-form-urlencoded\r\n",
@@ -1551,6 +1564,67 @@ trait ContactWikiTrait {
 	}
 
 	/**
+	 * The official websites (P856) an entity lists - a preferred one first, a deprecated one left out.
+	 *
+	 * @return list<string>
+	 */
+	public static function officialSites( array $pEntity ): array {
+		$sites = [];
+		foreach( $pEntity['claims']['P856'] ?? [] as $claim ) {
+			$url = trim( (string)( $claim['mainsnak']['datavalue']['value'] ?? '' ) );
+			if( $url === '' || ( $claim['rank'] ?? 'normal' ) === 'deprecated' ) {
+				continue;
+			}
+			$sites[] = [ 'url' => $url, 'preferred' => ( $claim['rank'] ?? 'normal' ) === 'preferred' ];
+		}
+		usort( $sites, fn( $a, $b ) => $b['preferred'] <=> $a['preferred'] );
+		return array_values( array_unique( array_column( $sites, 'url' ) ) );
+	}
+
+	/**
+	 * The text values of one claim property, de-duplicated by case - P742 values are plain strings, P1477 a monolingual
+	 * text ({text, language}).
+	 *
+	 * @return list<string>
+	 */
+	public static function claimTexts( array $pEntity, string $pProperty ): array {
+		$texts = [];
+		foreach( $pEntity['claims'][$pProperty] ?? [] as $claim ) {
+			$value = $claim['mainsnak']['datavalue']['value'] ?? null;
+			$text = trim( (string)( is_array( $value ) ? ( $value['text'] ?? '' ) : $value ) );
+			if( $text !== '' ) {
+				$texts[mb_strtolower( $text )] = $text;
+			}
+		}
+		return array_values( $texts );
+	}
+
+	/**
+	 * The name a person is really called, when Wikidata's own label is a pen name: the label is one of the entity's
+	 * pseudonyms (P742) and a birth name (P1477) is held. The fullest English alias that begins with the birth name wins
+	 * (Robin Hobb's "Margaret Astrid Lindholm Ogden" over the birth name "Margaret Astrid Lindholm"), else the birth name
+	 * itself. Null for a person published under their own name, or with no birth name to go on.
+	 */
+	public static function realNameFor( array $pEntity ): ?string {
+		$pseudonyms = array_map( 'mb_strtolower', self::claimTexts( $pEntity, 'P742' ) );
+		if( !in_array( mb_strtolower( self::entityLabel( $pEntity ) ), $pseudonyms, true ) ) {
+			return null;
+		}
+		$aliases = array_column( $pEntity['aliases']['en'] ?? [], 'value' );
+		foreach( self::claimTexts( $pEntity, 'P1477' ) as $birth ) {
+			$best = $birth;
+			foreach( $aliases as $alias ) {
+				$alias = trim( (string)$alias );
+				if( !in_array( mb_strtolower( $alias ), $pseudonyms, true ) && str_starts_with( mb_strtolower( $alias ), mb_strtolower( $birth ).' ' ) && mb_strlen( $alias ) > mb_strlen( $best ) ) {
+					$best = $alias;
+				}
+			}
+			return $best;
+		}
+		return null;
+	}
+
+	/**
 	 * The names this person writes (or wrote) under, and their birth name, from Wikidata's pseudonym (P742)
 	 * and birth name (P1477) claims - a person only: each pen name a 'penname' row, the birth name a
 	 * 'birthname' row. A book is credited to the name it was published under and linked to the person, so a
@@ -1563,18 +1637,7 @@ trait ContactWikiTrait {
 		if( $this instanceof ContactWikiGroup ) {
 			return [];
 		}
-		// P742 values are plain strings, P1477 a monolingual text ({text, language}).
-		$claimTexts = function( string $pProperty ) use ( $pEntity ): array {
-			$texts = [];
-			foreach( $pEntity['claims'][$pProperty] ?? [] as $claim ) {
-				$value = $claim['mainsnak']['datavalue']['value'] ?? null;
-				$text = trim( (string)( is_array( $value ) ? ( $value['text'] ?? '' ) : $value ) );
-				if( $text !== '' ) {
-					$texts[mb_strtolower( $text )] = $text;
-				}
-			}
-			return array_values( $texts );
-		};
+		$claimTexts = fn( string $pProperty ) => self::claimTexts( $pEntity, $pProperty );
 		$items = [];
 		foreach( [ 'penname' => 'P742', 'birthname' => 'P1477' ] as $item => $property ) {
 			$wanted = [];
@@ -1705,7 +1768,7 @@ trait ContactWikiTrait {
 			return [ 'content' => $existing ];
 		}
 		if( $qid ) {
-			$made = self::createFromWikidata( $qid, false );
+			$made = self::createFromWikidata( $qid, false, [], true );
 			if( isset( $made['content'] ) ) {
 				$made['content']->applyOpenLibraryData( $olid );
 				return $made;
@@ -1758,7 +1821,7 @@ trait ContactWikiTrait {
 	 * @param bool|null $pIsGroup
 	 * @return array{content:object}|array{error:string}
 	 */
-	public static function createFromWikidata( string $pQid, ?bool $pIsGroup = null, array $pExtraTypes = [] ): array {
+	public static function createFromWikidata( string $pQid, ?bool $pIsGroup = null, array $pExtraTypes = [], bool $pRealName = false ): array {
 		$entity = self::fetchWikidataEntity( $pQid );
 		if( !$entity ) {
 			return [ 'error' => KernelTools::tra( 'Could not fetch that Wikidata entity.' ).' ('.$pQid.')' ];
@@ -1789,7 +1852,10 @@ trait ContactWikiTrait {
 			$storeHash = [ 'organisation' => $label, 'fContactTypesSubmitted' => 1, 'contact_types' => $contactTypes ];
 		} else {
 			$gContent = new ContactWikiIndividual();
-			$parts = explode( ' ', $label );
+			// An author known by a pen name is made under the real name, the pen name kept as a name they write under -
+			// asked for by the author routes only; a performer's stage name stays the name they are known by.
+			$realName = $pRealName ? self::realNameFor( $entity ) : null;
+			$parts = explode( ' ', $realName ?? $label );
 			$surname = array_pop( $parts ) ?: '';
 			foreach( ContactWikiIndividual::occupationQids( $entity ) as $qid ) {
 				if( isset( ContactWikiIndividual::OCCUPATION_MAP[$qid] ) ) {
@@ -1814,6 +1880,9 @@ trait ContactWikiTrait {
 		}
 		self::stepDone( 'contact store', $t );
 		$gContent->reloadFromWikidata( $pQid, $bio !== null || self::$skipBiography );
+		if( !empty( $realName ) ) {
+			$gContent->addOtherName( $label );
+		}
 		return [ 'content' => $gContent ];
 	}
 
