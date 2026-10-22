@@ -1569,7 +1569,7 @@ trait ContactWikiTrait {
 		global $gBitDb;
 		$key = fn( string $n ) => str_replace( ' ', '', self::normaliseName( $n ) );
 		$order = 0;
-		foreach( $gBitDb->getAll( "SELECT `xkey_ext`, `xorder` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ( 'penname', 'birthname' ) AND `end_date` IS NULL", [ $this->mContentId ] ) ?: [] as $row ) {
+		foreach( $gBitDb->getAll( "SELECT COALESCE( NULLIF( `xkey_ext`, '' ), `xkey` ) AS `xkey_ext`, `xorder` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` IN ( 'penname', 'birthname' ) AND `end_date` IS NULL", [ $this->mContentId ] ) ?: [] as $row ) {
 			if( $key( (string)$row['xkey_ext'] ) === $key( $pName ) ) {
 				return false;
 			}
