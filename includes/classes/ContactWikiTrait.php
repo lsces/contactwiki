@@ -76,6 +76,22 @@ trait ContactWikiTrait {
 			$gMusicGallery->loadImages( $musicGalleryListHash );
 			$pBitSmarty->assign( 'gMusicGallery', $gMusicGallery );
 		}
+
+		// The Library (book) galleries that name this contact as their author - fisheyemedia's authors pass and book loader set the
+		// gallery's 'author_contact_id' preference, so the link back is read from that rather than kept as a second record to drift.
+		global $gBitDb;
+		$bookGalleries = [];
+		foreach( $gBitDb->getAll(
+			"SELECT p.`content_id`, lc.`title` FROM `".BIT_DB_PREFIX."liberty_content_prefs` p
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = p.`content_id`
+			 WHERE p.`pref_name` = 'author_contact_id' AND p.`pref_value` = ? ORDER BY lc.`title`", [ (string)$this->mContentId ] ) ?: [] as $row ) {
+			$bookGallery = new FisheyeGallery( null, (int)$row['content_id'] );
+			$bookGallery->load();
+			if( $bookGallery->isValid() ) {
+				$bookGalleries[] = [ 'title' => $row['title'], 'url' => $bookGallery->getDisplayUrl() ];
+			}
+		}
+		$pBitSmarty->assign( 'wikiBookGalleries', $bookGalleries );
 	}
 
 	/**

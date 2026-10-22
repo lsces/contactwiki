@@ -79,6 +79,13 @@
 			</div>
 		{/if}
 
+		{if $wikiBookGalleries}
+			<div class="wiki-profile-gallery">
+				<h2>{tr}Library{/tr}</h2>
+				<ul class="list-unstyled">{foreach from=$wikiBookGalleries item=bookGallery}<li><a href="{$bookGallery.url|escape}">{$bookGallery.title|escape}</a></li>{/foreach}</ul>
+			</div>
+		{/if}
+
 		{if $gMusicGallery && $gMusicGallery->mGalleryId}
 			<div class="wiki-profile-gallery">
 				<h2>{tr}Discography{/tr}</h2>
