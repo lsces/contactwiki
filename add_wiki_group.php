@@ -130,4 +130,4 @@ $gBitSmarty->assign( 'wikiImagePreviewUrl', $wikiImagePreviewUrl );
 $gBitSmarty->assign( 'wikiSitelink', $wikiSitelink );
 $gBitSmarty->assign( 'groupTypes', $gContent->getAvailableTypeItems() );
 
-$gBitSystem->display( 'bitpackage:contactwiki/add_wiki_group.tpl', KernelTools::tra( 'Add Wiki Group' ), [ 'display_mode' => 'edit' ] );
+$gBitSystem->display( 'bitpackage:contactwiki/add_wiki_group.tpl', KernelTools::tra( 'Add Wiki Organisation' ), [ 'display_mode' => 'edit' ] );

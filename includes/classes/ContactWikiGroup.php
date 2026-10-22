@@ -54,6 +54,8 @@ class ContactWikiGroup extends ContactBusiness {
 		'Q2088357' => 'WB04', // musical ensemble
 		'Q1762059' => 'WB05', // film production company
 		'Q18127'   => 'WB06', // record label
+		'Q2085381' => 'WB07', // publishing house
+		'Q1320047' => 'WB07', // book publisher
 	];
 
 	// MusicBrainz's own artist type -> WBxx, for a group created from MusicBrainz alone (no Wikidata
@@ -69,7 +71,7 @@ class ContactWikiGroup extends ContactBusiness {
 		$this->mContentTypeGuid = CONTACTWIKIGROUP_CONTENT_TYPE_GUID;
 		$this->registerContentType( CONTACTWIKIGROUP_CONTENT_TYPE_GUID, [
 			'content_type_guid' => CONTACTWIKIGROUP_CONTENT_TYPE_GUID,
-			'content_name'      => 'Wiki Group',
+			'content_name'      => 'Wiki Organisation',
 			'handler_class'     => 'ContactWikiGroup',
 			'handler_package'   => 'contactwiki',
 			'handler_file'      => 'ContactWikiGroup.php',

@@ -2,7 +2,7 @@
    ($row.wiki_summary). Used in contact's list_contacts.php Information cell. *}
 {strip}
 {assign var=ws value=$row.wiki_summary}
-{if $ws.types}{$ws.types|join:', '|escape}{else}{if $ws.is_group}{tr}Group{/tr}{else}{tr}Individual{/tr}{/if}{/if}
+{if $ws.types}{$ws.types|join:', '|escape}{else}{if $ws.is_group}{tr}Organisation{/tr}{else}{tr}Individual{/tr}{/if}{/if}
 {if $ws.date_from || $ws.date_to}
 	&nbsp;&middot;&nbsp;{if $ws.is_group && !$ws.date_to}{tr}formed{/tr} {/if}{$ws.date_from|escape}{if $ws.date_to} &ndash; {$ws.date_to|escape}{/if}
 {/if}

@@ -181,13 +181,13 @@
 								<td>
 									{if $person.candidates|@count == 1}
 										<a href="{$person.candidates[0].view_url|escape}">{$person.candidates[0].title|escape}</a>
-										{if $person.candidates[0].content_type_guid == 'contactwikigroup'}<span class="text-muted">({tr}group{/tr})</span>{/if}
+										{if $person.candidates[0].content_type_guid == 'contactwikigroup'}<span class="text-muted">({tr}organisation{/tr})</span>{/if}
 										{if $person.candidates[0].qid}<a class="small text-muted" href="https://www.wikidata.org/wiki/{$person.candidates[0].qid|escape}" target="_blank" rel="noopener">{$person.candidates[0].qid|escape}</a>{/if}
 									{else}
 										{tr}Several contacts have this name - choose the right one{/tr}:
 										{foreach from=$person.candidates item=c name=choices}
 											<br /><label><input type="radio" name="contact[{$person.key|escape}]" value="{$c.content_id}" {if $smarty.foreach.choices.first}checked="checked"{/if} />
-											<a href="{$c.view_url|escape}">{$c.title|escape}</a>{if $c.content_type_guid == 'contactwikigroup'} ({tr}group{/tr}){/if}{if $c.qid} <span class="small text-muted">{$c.qid|escape}</span>{/if}</label>
+											<a href="{$c.view_url|escape}">{$c.title|escape}</a>{if $c.content_type_guid == 'contactwikigroup'} ({tr}organisation{/tr}){/if}{if $c.qid} <span class="small text-muted">{$c.qid|escape}</span>{/if}</label>
 										{/foreach}
 									{/if}
 								</td>

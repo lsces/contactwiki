@@ -34,7 +34,7 @@
 					{assign var=ws value=$row.wiki_summary}
 					<tr>
 						<td><a href="{$row.view_url|escape}">{$row.title|escape}</a></td>
-						<td>{if $ws.types}{$ws.types|join:', '|escape}{else}<span class="text-muted">{if $ws.is_group}{tr}Group{/tr}{else}{tr}Individual{/tr}{/if}</span>{/if}</td>
+						<td>{if $ws.types}{$ws.types|join:', '|escape}{else}<span class="text-muted">{if $ws.is_group}{tr}Organisation{/tr}{else}{tr}Individual{/tr}{/if}</span>{/if}</td>
 						<td>{if $ws.date_from || $ws.date_to}{$ws.date_from|escape}{if $ws.date_to} &ndash; {$ws.date_to|escape}{/if}{/if}</td>
 						<td>{if $ws.qid}<a href="https://www.wikidata.org/wiki/{$ws.qid|escape}" target="_blank" rel="noopener">{$ws.qid|escape}</a>{elseif $ws.mbid}<a class="text-muted" href="https://musicbrainz.org/artist/{$ws.mbid|escape}" target="_blank" rel="noopener">{tr}MusicBrainz only{/tr}</a>{/if}</td>
 						<td>{if $ws.gallery_url}<a href="{$ws.gallery_url|escape}">{tr}Gallery{/tr}</a>{/if}</td>

@@ -1,7 +1,7 @@
 {strip}
 <div class="edit contact">
 	<div class="header">
-		<h1>{tr}Add Wiki Group{/tr}</h1>
+		<h1>{tr}Add Wiki Organisation{/tr}</h1>
 	</div>
 
 	<div class="body">
