@@ -20,7 +20,7 @@ $gBitSystem->verifyPermission( 'p_contact_update' );
 if( !empty( $_REQUEST['content_id'] ) ) {
 	$gContent = \Bitweaver\Liberty\LibertyContent::getLibertyObject( (int)$_REQUEST['content_id'] );
 	if( !( $gContent instanceof ContactWikiGroup ) ) {
-		$gBitSystem->fatalError( KernelTools::tra( 'No Wiki Group exists with the given ID' ), null, null, HttpStatusCodes::HTTP_NOT_FOUND );
+		$gBitSystem->fatalError( KernelTools::tra( 'No Wiki Organisation exists with the given ID' ), null, null, HttpStatusCodes::HTTP_NOT_FOUND );
 	}
 } else {
 	$gContent = new ContactWikiGroup();
@@ -64,6 +64,9 @@ $gContent->loadXrefInfo();
 // contact/edit.tpl reads $gContent directly (contact's own edit.php gets it assigned via
 // lookup_contact_inc.php, which this page doesn't use).
 $gBitSmarty->assign( 'gContent', $gContent );
+// The shared template's Delete link comes back to this page, not contact's own edit.php.
+$gBitSmarty->assign( 'editPackage', 'contactwiki' );
+$gBitSmarty->assign( 'editFile', 'edit_wiki_group.php' );
 $gBitSmarty->assign( 'gXrefInfo', $gContent->mXrefInfo );
 $gBitSmarty->assign( 'isPerson', false );
 $gBitSmarty->assign( 'wikiReloadResult', $wikiReloadResult );
