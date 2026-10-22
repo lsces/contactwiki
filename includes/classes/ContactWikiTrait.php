@@ -1220,7 +1220,7 @@ trait ContactWikiTrait {
 
 	/**
 	 * A contact from a credited name alone - nothing external known (TMDb has no record, Wikidata none chosen). Tagged from the credit roles
-	 * (director -> WP02, writer -> WP07, star -> WP01, a book's author -> WP11). Its identity is its name; a later Reload from Wikidata still works once a Wikidata id is added.
+	 * (director -> WP02, writer -> WP07, star -> WP01, a book's author -> WP14). Its identity is its name; a later Reload from Wikidata still works once a Wikidata id is added.
 	 *
 	 * @param string[] $pRoles  the credit roles (director/writer/star/author)
 	 * @return array{content:object}|array{error:string}
@@ -1230,7 +1230,7 @@ trait ContactWikiTrait {
 		$parts = explode( ' ', trim( $pName ) );
 		$surname = array_pop( $parts ) ?: '';
 		// Someone who is only ever on screen as themselves (a "Self - Presenter") is not an Actor: no tag, so they list under Others.
-		$codes = [ 'star' => $pAsThemselves ? 'WP99' : 'WP01', 'director' => 'WP02', 'writer' => 'WP07', 'author' => 'WP11' ];
+		$codes = [ 'star' => $pAsThemselves ? 'WP99' : 'WP01', 'director' => 'WP02', 'writer' => 'WP07', 'author' => 'WP14' ];
 		$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1,
 			'contact_types' => array_values( array_unique( array_filter( array_map( fn( $r ) => $codes[$r] ?? null, $pRoles ) ) ) ) ];
 		if( !$gContent->store( $storeHash ) ) {
@@ -1533,11 +1533,12 @@ trait ContactWikiTrait {
 	}
 
 	/**
-	 * Tag this person as a writer (WP11) if they are not already - additive, as every type tag.
+	 * Tag this person as a book author (WP14) if they are not already - additive, as every type tag. WP11 stays the
+	 * broader Wikidata "writer" tag (journalists, historians); WP14 is only for people the Library credits with books.
 	 */
-	public function markAsWriter(): void {
+	public function markAsBookAuthor(): void {
 		if( !( $this instanceof ContactWikiGroup ) ) {
-			$this->addTypeTags( [ 'WP11' ] );
+			$this->addTypeTags( [ 'WP14' ] );
 		}
 	}
 
@@ -1777,7 +1778,7 @@ trait ContactWikiTrait {
 		$parts = explode( ' ', trim( (string)$author['name'] ) );
 		$surname = array_pop( $parts ) ?: '';
 		$gContent = new ContactWikiIndividual();
-		$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1, 'contact_types' => [ 'WP11' ] ];
+		$storeHash = [ 'forename' => implode( ' ', $parts ), 'surname' => $surname, 'fContactTypesSubmitted' => 1, 'contact_types' => [ 'WP14' ] ];
 		if( !$gContent->store( $storeHash ) ) {
 			return [ 'error' => implode( '; ', $gContent->mErrors ) ];
 		}
