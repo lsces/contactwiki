@@ -79,10 +79,12 @@
 			</div>
 		{/if}
 
-		{if $wikiBookGalleries}
+		{if $wikiBookGalleries || $wikiCreditedBooks}
 			<div class="wiki-profile-gallery">
 				<h2>{tr}Library{/tr}</h2>
-				<ul class="list-unstyled">{foreach from=$wikiBookGalleries item=bookGallery}<li><a href="{$bookGallery.url|escape}">{$bookGallery.title|escape}</a></li>{/foreach}</ul>
+				<ul class="list-unstyled">{foreach from=$wikiBookGalleries item=bookGallery}<li><a href="{$bookGallery.url|escape}">{$bookGallery.title|escape}</a></li>{/foreach}
+				{foreach from=$wikiCreditedBooks item=creditedBook}<li><a href="{$creditedBook.url|escape}">{$creditedBook.title|escape}</a>{if $creditedBook.role} ({$creditedBook.role|escape}){/if}</li>{/foreach}
+				{if $wikiCreditedMore}<li>{tr}and{/tr} {$wikiCreditedMore} {tr}more{/tr}</li>{/if}</ul>
 			</div>
 		{/if}
 

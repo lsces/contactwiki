@@ -22,6 +22,9 @@ use Bitweaver\KernelTools;
 
 trait ContactWikiTrait {
 
+	/** Credited books listed on a contact page beyond their author galleries before the rest is summed up as a count */
+	const CREDITED_BOOKS_MAX = 10;
+
 	/**
 	 * Populates everything contactwiki's own view.php/view_wiki_profile.tpl need beyond the basics
 	 * lookup_contact_inc.php's generic load already provides - role pills, profile thumbnail, and
@@ -81,6 +84,7 @@ trait ContactWikiTrait {
 		// gallery's 'author_contact_id' preference, so the link back is read from that rather than kept as a second record to drift.
 		global $gBitDb;
 		$bookGalleries = [];
+		$bookGalleryRows = [];
 		foreach( $gBitDb->getAll(
 			"SELECT p.`content_id`, lc.`title` FROM `".BIT_DB_PREFIX."liberty_content_prefs` p
 			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = p.`content_id`
@@ -88,10 +92,44 @@ trait ContactWikiTrait {
 			$bookGallery = new FisheyeGallery( null, (int)$row['content_id'] );
 			$bookGallery->load();
 			if( $bookGallery->isValid() ) {
+				$bookGalleryRows[] = $row;
 				$bookGalleries[] = [ 'title' => $row['title'], 'url' => $bookGallery->getDisplayUrl() ];
 			}
 		}
 		$pBitSmarty->assign( 'wikiBookGalleries', $bookGalleries );
+
+		// Books that credit this contact (author, editor...) but are not filed in one of their author galleries above, directly or one
+		// folder down: the whole Library entry for a one-book author, and the odd contribution to someone else's book for the rest.
+		$creditedBooks = [];
+		$creditedMore = 0;
+		$creditRows = $gBitDb->getAll(
+			"SELECT x.`content_id`, MIN( x.`item` ) AS `item`, lc.`title` FROM `".BIT_DB_PREFIX."liberty_xref` x
+			 JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = x.`content_id`
+			 WHERE x.`xref` = ? AND x.`end_date` IS NULL AND lc.`content_type_guid` = 'fisheyebook'
+			 AND x.`item` IN ( 'author', 'editor', 'illustrator', 'translator', 'narrator' )
+			 GROUP BY x.`content_id`, lc.`title` ORDER BY lc.`title`", [ $this->mContentId ] ) ?: [];
+		if( $creditRows && $bookGalleryRows ) {
+			// Filed in an author gallery already (directly or in a folder of it) - reached by the gallery link. Done here, over the few
+			// credited ids, as one NOT IN over the whole gallery map is far too slow on Firebird.
+			$galleryIds = array_map( fn( $g ) => (int)$g['content_id'], $bookGalleryRows );
+			$folderIds = $gBitDb->getCol( "SELECT `item_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `gallery_content_id` IN ( ".implode( ',', $galleryIds )." )" ) ?: [];
+			$parents = array_map( 'intval', array_merge( $galleryIds, $folderIds ) );
+			$bookIds = array_map( fn( $r ) => (int)$r['content_id'], $creditRows );
+			$filed = array_flip( array_map( 'intval', $gBitDb->getCol( "SELECT `item_content_id` FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` WHERE `item_content_id` IN ( ".implode( ',', $bookIds )." ) AND `gallery_content_id` IN ( ".implode( ',', $parents )." )" ) ?: [] ) );
+			$creditRows = array_values( array_filter( $creditRows, fn( $r ) => !isset( $filed[(int)$r['content_id']] ) ) );
+		}
+		foreach( $creditRows as $i => $row ) {
+			if( $i >= self::CREDITED_BOOKS_MAX ) {
+				$creditedMore = count( $creditRows ) - $i;
+				break;
+			}
+			$book = \Bitweaver\Fisheye\FisheyeImage::lookup( [ 'content_id' => (int)$row['content_id'] ] );
+			if( $book && $book->isValid() ) {
+				$creditedBooks[] = [ 'title' => $row['title'], 'url' => $book->getDisplayUrl(), 'role' => $row['item'] === 'author' ? '' : $row['item'] ];
+			}
+		}
+		$pBitSmarty->assign( 'wikiCreditedBooks', $creditedBooks );
+		$pBitSmarty->assign( 'wikiCreditedMore', $creditedMore );
 	}
 
 	/**
