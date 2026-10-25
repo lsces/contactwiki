@@ -49,6 +49,8 @@ if( ( $gBitUser->isAdmin() || $gBitUser->hasPermission( 'p_contact_update' ) ) &
 
 $gBitSmarty->assign( 'gXrefInfo', $gContent->mXrefInfo );
 $gContent->assignViewVars( $gBitSmarty );
+// The Extras button (fisheyemedia's panel), when that package is there.
+$gBitSmarty->assign( 'showExtras', $gBitSystem->isPackageActive( 'fisheyemedia' ) && method_exists( $gContent, 'getExtrasCounts' ) );
 
 $gBitSystem->setBrowserTitle( $gContent->getTitle() );
 $gBitSystem->display( 'bitpackage:contactwiki/view_wiki_profile.tpl' );

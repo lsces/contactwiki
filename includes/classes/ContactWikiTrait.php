@@ -21,6 +21,68 @@ use Bitweaver\Fisheye\FisheyeGallery;
 use Bitweaver\KernelTools;
 
 trait ContactWikiTrait {
+	// A contact's other pictures: a plain fisheye gallery, Images / People (or Organisations) / name, found by a preference it carries.
+	use \Bitweaver\Fisheye\FisheyePicturesFolderTrait;
+
+	public function picturesFolderPreference(): string {
+		return 'contact_content_id';
+	}
+
+	/** "Tom Jones", not "Contact - Tom Jones" or the stored "Jones, Tom" - the way an author's gallery is named. */
+	public function picturesFolderTitle(): string {
+		$title = trim( (string)$this->mDb->getOne( "SELECT `title` FROM `".BIT_DB_PREFIX."liberty_content` WHERE `content_id` = ?", [ $this->mContentId ] ) );
+		return preg_match( '/^([^,]+),\s*(.+)$/', $title, $m ) && !( $this instanceof ContactWikiGroup ) ? trim( $m[2] ).' '.trim( $m[1] ) : $title;
+	}
+
+	public function picturesFolderTypes(): string {
+		return $this instanceof ContactWikiGroup ? 'Organisations' : 'People';
+	}
+
+	/**
+	 * What the Extras button has to offer: the contact's downloaded Wikidata picture(s) (the 'image' rows) and everything in its pictures
+	 * folder. Same shape as the media items give (fisheyemedia's extras.php asks any content for it), counted in SQL.
+	 *
+	 * @return array{featurettes:int,extras:int}
+	 */
+	public function getExtrasCounts(): array {
+		$counts = [ 'featurettes' => 0, 'extras' => 0 ];
+		if( !$this->mContentId ) {
+			return $counts;
+		}
+		$counts['extras'] = (int)$this->mDb->getOne( "SELECT COUNT(*) FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL", [ $this->mContentId ] );
+		if( $folder = $this->getPicturesFolder() ) {
+			$counts['extras'] += (int)$this->mDb->getOne(
+				"SELECT COUNT(*) FROM `".BIT_DB_PREFIX."fisheye_gallery_image_map` m JOIN `".BIT_DB_PREFIX."liberty_content` lc ON lc.`content_id` = m.`item_content_id`
+				 WHERE m.`gallery_content_id` = ? AND lc.`content_type_guid` <> 'fisheyegallery'", [ $folder['content_id'] ] );
+		}
+		return $counts;
+	}
+
+	public function getExtrasCount(): int {
+		return array_sum( $this->getExtrasCounts() );
+	}
+
+	/** @return array{groups:array[]} one Pictures group: 'id', 'kind', 'items' (thumb, url, title) and 'links' (title, url, icon) for this user */
+	public function getExtrasGroups(): array {
+		global $gBitUser;
+		$pictures = [];
+		foreach( $this->mDb->getAll( "SELECT `xref_id`, `xkey_ext` FROM `".BIT_DB_PREFIX."liberty_xref` WHERE `content_id` = ? AND `item` = 'image' AND `end_date` IS NULL ORDER BY `xorder`, `xref_id`", [ $this->mContentId ] ) ?: [] as $row ) {
+			$view = CONTACT_PKG_URL.'view_extra_image.php?xref_id='.(int)$row['xref_id'];
+			$pictures[] = [ 'thumb' => $view, 'url' => $view, 'title' => pathinfo( (string)$row['xkey_ext'], PATHINFO_FILENAME ) ];
+		}
+		foreach( $this->getPicturesFolderImages( 200 ) as $image ) {
+			$pictures[] = [ 'thumb' => $image['thumb'], 'url' => $image['url'], 'title' => $image['title'] ];
+		}
+		$links = [];
+		if( $this->hasUpdatePermission() && $gBitUser->hasPermission( 'p_fisheye_upload' ) && defined( 'FISHEYEMEDIA_PKG_URL' ) ) {
+			$links[] = [ 'title' => 'Add Pictures', 'url' => FISHEYEMEDIA_PKG_URL.'pictures.php?content_id='.$this->mContentId, 'icon' => 'list-add' ];
+		}
+		if( $folder = $this->getPicturesFolder() ) {
+			$links[] = [ 'title' => 'Open pictures folder', 'url' => BIT_ROOT_URL.'index.php?content_id='.$folder['content_id'], 'icon' => 'folder-open' ];
+		}
+		return [ 'groups' => ( $pictures || $links ) ? [ [ 'id' => 'pictures', 'kind' => 'Extras', 'items' => $pictures, 'links' => $links ] ] : [] ];
+	}
+
 
 	/** Credited books listed on a contact page beyond their author galleries before the rest is summed up as a count */
 	const CREDITED_BOOKS_MAX = 10;
