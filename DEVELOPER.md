@@ -3,7 +3,7 @@
 Wiki-sourced contacts: individuals and groups whose identity, biography, dates, image and external
 ids come from Wikidata (or MusicBrainz where Wikidata has no item), used as the one shared identity
 every media credit links to. The first half is the design reasoning, which still holds; the second
-half is how the package works today. For using it, see [`MANUAL.md`](MANUAL.md). Read alongside `contact/MANUAL.md` (the base
+half is how the package works today. For using it, see [`MANUAL.md`](MANUAL.md). Read alongside `contact/DEVELOPER.md` (the base
 package this extends) and `liberty/MANUAL.md` (the xref machinery it builds on - no schema of its
 own beyond its two content types).
 
@@ -43,7 +43,7 @@ Two things do **not** get merged into one object:
 ## Existing seed: the `WPxx`/`WBxx` role markers
 
 `contactperson`'s `type` xref group carries a set of person-role markers, at `sort_order=0`
-(Liberty's toggleable-multi-tag convention — see `contact/MANUAL.md`'s own `P01`/`P02` for the
+(Liberty's toggleable-multi-tag convention — see `contact/DEVELOPER.md`'s own `P01`/`P02` for the
 pattern), distinct from the personal/business-capacity `P01`/`P02` markers. `contactbusiness`
 carries the equivalent group/ensemble-role markers:
 
@@ -88,7 +88,7 @@ template shape — never `template='text'`.
 ## Structure
 
 - **Contact → discography gallery** (optional): a `music_gallery` xref item, `content_type_guid`
-  scoped to `contact` (the shared base level `contact/MANUAL.md` already registers SCREF/addresses
+  scoped to `contact` (the shared base level `contact/DEVELOPER.md` already registers SCREF/addresses
   at, not `contactperson`/`contactbusiness` specifically — a linked identity could be either),
   `xref` = the gallery's `content_id`. Set only when a real folder-backed gallery exists for that
   Contact.

@@ -68,6 +68,36 @@ On a contact's edit page:
 
 Anything can also be corrected by hand in the contact's detail tabs.
 
+## Viewing a contact
+
+A wiki contact's page shows, under the name:
+
+- **role tags** (Actor, Director, Band ...);
+- the **biography facts** that are known - born, died, formed, disbanded - and the person's or band's own web sites;
+- the **biography** text and a photo;
+- **links** to where the contact is described elsewhere (Wikidata, IMDb, MusicBrainz and so on - whichever have been found);
+- for a person in the film and TV library, the **characters** they played and the programmes they appeared in as
+  themselves; for a character, **who played** it;
+- a **Library** section for an author's books and a **Discography** for an artist, when the music or book library has
+  them.
+
+Wiki contacts have no comments thread: that belongs to the ordinary person and business contacts, which keep the
+conversations with a customer or supplier.
+
+### The Extras button — more pictures
+
+Beside the contact's name there is an **Extras** button (when the media package is installed). It opens a panel over
+the page with the contact's pictures: the photo fetched from Wikidata, and every picture in the contact's own pictures
+folder.
+
+- **Add Pictures** (for anyone allowed to edit the contact and upload pictures) makes the contact's folder if it is not
+  there yet and opens the normal upload page with it already chosen.
+- **Open pictures folder** opens the folder as a gallery.
+- The folder is an ordinary gallery, **Images → People** (or **Organisations** for a band or company) **→ the contact's
+  name** written as "Forename Surname". It can be reordered, renamed or restricted like any other gallery.
+
+The button shows when there is something to show, or when you could add something.
+
 ## Finding contacts
 
 - **Wiki Contacts** (Contact menu) lists wiki individuals and groups, with their types, music
