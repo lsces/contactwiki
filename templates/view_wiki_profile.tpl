@@ -1,7 +1,9 @@
 {strip}
 <div class="display contact wiki-profile">
-	{include file="bitpackage:contact/contact_icons.tpl"}
-	{include file="bitpackage:contact/contact_header.tpl"}
+	<header>
+		{include file="bitpackage:contact/contact_icons.tpl"}
+		{include file="bitpackage:contact/contact_header.tpl"}
+	</header>
 	{include file="bitpackage:contact/contact_date_bar.tpl"}
 
 	<div class="body">
