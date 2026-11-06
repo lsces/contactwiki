@@ -98,6 +98,8 @@ class ContactWikiIndividual extends ContactPerson {
 
 	public function __construct( $pContactId = NULL, $pContentId = NULL ) {
 		parent::__construct( $pContactId, $pContentId );
+		// Viewing a wiki contact has its own permission, so contact's p_contact_view can stay Registered-only
+		$this->mViewContentPerm = 'p_contactwiki_view';
 		$this->mContentTypeGuid = CONTACTWIKIINDIVIDUAL_CONTENT_TYPE_GUID;
 		$this->registerContentType( CONTACTWIKIINDIVIDUAL_CONTENT_TYPE_GUID, [
 			'content_type_guid' => CONTACTWIKIINDIVIDUAL_CONTENT_TYPE_GUID,

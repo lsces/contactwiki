@@ -68,6 +68,8 @@ class ContactWikiGroup extends ContactBusiness {
 
 	public function __construct( $pContactId = NULL, $pContentId = NULL ) {
 		parent::__construct( $pContactId, $pContentId );
+		// Viewing a wiki contact has its own permission, so contact's p_contact_view can stay Registered-only
+		$this->mViewContentPerm = 'p_contactwiki_view';
 		$this->mContentTypeGuid = CONTACTWIKIGROUP_CONTENT_TYPE_GUID;
 		$this->registerContentType( CONTACTWIKIGROUP_CONTENT_TYPE_GUID, [
 			'content_type_guid' => CONTACTWIKIGROUP_CONTENT_TYPE_GUID,

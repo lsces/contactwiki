@@ -14,14 +14,17 @@ require_once '../kernel/includes/setup_inc.php';
 global $gBitSystem, $gBitSmarty;
 
 $gBitSystem->verifyPackage( 'contactwiki' );
-$gBitSystem->verifyPermission( 'p_contact_view' );
+$gBitSystem->verifyPermission( 'p_contactwiki_view' );
 
 include_once CONTACT_PKG_INCLUDE_PATH . 'lookup_contact_inc.php';
 
 if( !$gContent->isValid() ) {
-	header( "location: " . CONTACT_PKG_URL . "list_contacts.php" );
+	header( "location: " . CONTACTWIKI_PKG_URL . "list_wiki.php" );
 	die;
 }
+// The lookup loads any contact whatever its type, so a private contact's content_id given to this page must still need
+// that contact's own permission: a wiki contact asks for p_contactwiki_view, a person or business for p_contact_view.
+$gContent->verifyViewPermission();
 
 if( $gContent->isCommentable() ) {
 	$commentsParentId = $gContent->mContentId;

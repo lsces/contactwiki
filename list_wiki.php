@@ -19,7 +19,7 @@ require_once '../kernel/includes/setup_inc.php';
 global $gBitSystem, $gBitSmarty;
 
 $gBitSystem->verifyPackage( 'contactwiki' );
-$gBitSystem->verifyPermission( 'p_contact_view' );
+$gBitSystem->verifyPermission( 'p_contactwiki_view' );
 
 $listContent = new Contact();
 $listHash = $_REQUEST;

@@ -26,10 +26,13 @@ $gBitInstaller->registerContentObjects( CONTACTWIKI_PKG_NAME, [
 ] );
 
 // ### Default User Permissions
-// p_contact_view/p_contact_update (contact's own) still gate the actual add/view/edit flows -
-// these pages manipulate Contact-family content same as any other contact, no need for a
-// duplicate permission concept. p_contactwiki_admin is only for this package's own admin settings
-// page (kernel/admin/index.php's generic ?package= dispatcher requires 'p_'.$package.'_admin').
+// p_contactwiki_view is the wiki's own view permission, apart from contact's p_contact_view: the wiki pages are the
+// public side (a media credit links to one), and contact's own records (businesses, people with addresses) stay behind
+// p_contact_view. Registered by default, so it can be given to Anonymous on the Role Permissions page without
+// opening contact. p_contact_create/update/expunge (contact's own) still gate the add/edit flows - these pages
+// manipulate Contact-family content same as any other contact. p_contactwiki_admin is only for this package's own admin
+// settings page (kernel/admin/index.php's generic ?package= dispatcher requires 'p_'.$package.'_admin').
 $gBitInstaller->registerUserPermissions( CONTACTWIKI_PKG_NAME, [
-	[ 'p_contactwiki_admin', 'Can admin Contact Wiki settings', 'admin', CONTACTWIKI_PKG_NAME ],
+	[ 'p_contactwiki_view',  'Can view Contact Wiki pages',      'registered', CONTACTWIKI_PKG_NAME ],
+	[ 'p_contactwiki_admin', 'Can admin Contact Wiki settings', 'admin',      CONTACTWIKI_PKG_NAME ],
 ] );
